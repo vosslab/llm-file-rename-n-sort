@@ -1,5 +1,5 @@
 """
-macos_llm_file_cleanup
+rename_n_sort
 =======================
 
 Local-first organizer for macOS Downloads, Desktop, and Documents folders.

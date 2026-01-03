@@ -3,7 +3,7 @@
 Tests for keep-original heuristics in the local backend.
 """
 
-from macos_llm_file_cleanup.llm import DummyLLM
+from rename_n_sort.llm import DummyLLM
 
 
 def test_keep_original_false_for_uuid():

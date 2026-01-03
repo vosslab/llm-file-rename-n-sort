@@ -5,9 +5,9 @@ Tests for one-by-one organizer mode.
 
 from pathlib import Path
 
-from macos_llm_file_cleanup.config import AppConfig
-from macos_llm_file_cleanup.llm import DummyLLM
-from macos_llm_file_cleanup.organizer import Organizer
+from rename_n_sort.config import AppConfig
+from rename_n_sort.llm import DummyLLM
+from rename_n_sort.organizer import Organizer
 
 
 def test_one_by_one_assigns_category_and_target(tmp_path: Path):

@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Tests for keep_original handling."""
 
-from macos_llm_file_cleanup.llm import OllamaChatLLM
-from macos_llm_file_cleanup.organizer import Organizer
-from macos_llm_file_cleanup.config import AppConfig
-from macos_llm_file_cleanup.llm import DummyLLM
+from rename_n_sort.llm import OllamaChatLLM
+from rename_n_sort.organizer import Organizer
+from rename_n_sort.config import AppConfig
+from rename_n_sort.llm import DummyLLM
 
 
 def test_parse_rename_with_keep_true():

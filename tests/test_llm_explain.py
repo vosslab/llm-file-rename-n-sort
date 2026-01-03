@@ -3,7 +3,7 @@
 Tests for LLM explain-mode parsing helpers.
 """
 
-from macos_llm_file_cleanup.llm import OllamaChatLLM
+from rename_n_sort.llm import OllamaChatLLM
 
 
 def test_parse_keep_response_explain():

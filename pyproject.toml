@@ -20,4 +20,4 @@ dev = ["pytest>=7.0.0"]
 image = ["pillow>=10.0.0", "pillow-heif>=0.18.0"]
 
 [project.scripts]
-macos-llm-file-cleanup = "macos_llm_file_cleanup.cli:main"
+macos-llm-file-cleanup = "rename_n_sort.cli:main"

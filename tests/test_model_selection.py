@@ -3,7 +3,7 @@
 Tests for model selection.
 """
 
-from macos_llm_file_cleanup import llm
+from rename_n_sort import llm
 
 
 def test_model_selection_small(monkeypatch):

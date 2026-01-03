@@ -5,7 +5,7 @@ Tests for plugin selection.
 
 from pathlib import Path
 
-from macos_llm_file_cleanup.plugins import build_registry
+from rename_n_sort.plugins import build_registry
 
 
 def test_registry_picks_pdf_plugin(tmp_path: Path):

@@ -3,7 +3,7 @@
 Tests for DummyLLM behavior.
 """
 
-from macos_llm_file_cleanup.llm import DummyLLM
+from rename_n_sort.llm import DummyLLM
 
 
 def test_dummy_llm_uses_title():

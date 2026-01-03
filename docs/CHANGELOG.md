@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-01-03
+- Update module references to `rename_n_sort` across code, tests, CLI entrypoint, and docs.
+- Add pytest `conftest.py` to ensure local package imports resolve without installation.
+
 ## 2026-01-02
 - Bump version to `26.01` and add root `VERSION` file synced with `pyproject.toml`.
 - Lazy-import `ai_image_caption.moondream2` so optional caption dependencies load only when needed.

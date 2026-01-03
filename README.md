@@ -62,9 +62,9 @@ pip install -r requirements.txt
 
 ## Quick start
 ```bash
-python -m macos_llm_file_cleanup --paths /path/to/folder --max-files 20          # dry run
-python -m macos_llm_file_cleanup --paths /path/to/folder --apply --max-files 10  # apply moves
-python -m macos_llm_file_cleanup --paths /path/to/folder --apply --model "llama3.2:3b-instruct-q5_K_M"
+python -m rename_n_sort --paths /path/to/folder --max-files 20          # dry run
+python -m rename_n_sort --paths /path/to/folder --apply --max-files 10  # apply moves
+python -m rename_n_sort --paths /path/to/folder --apply --model "llama3.2:3b-instruct-q5_K_M"
 ```
 
 ## CLI reference

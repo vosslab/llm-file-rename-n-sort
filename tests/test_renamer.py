@@ -5,7 +5,7 @@ Tests for collision handling.
 
 from pathlib import Path
 
-from macos_llm_file_cleanup.renamer import apply_move
+from rename_n_sort.renamer import apply_move
 
 
 def test_collision_creates_counter(tmp_path: Path):

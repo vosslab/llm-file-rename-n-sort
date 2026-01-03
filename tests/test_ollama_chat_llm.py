@@ -3,7 +3,7 @@
 Tests for OllamaChatLLM helpers.
 """
 
-from macos_llm_file_cleanup.llm import OllamaChatLLM, sanitize_filename
+from rename_n_sort.llm import OllamaChatLLM, sanitize_filename
 
 
 def test_parse_response_text_extracts_fields():

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Repo-root runner for macos_llm_file_cleanup.
+Repo-root runner for rename_n_sort.
 
 Examples:
 	python run_file_cleanup.py --paths ~/Downloads --max-files 20
@@ -21,7 +21,7 @@ def main() -> None:
 	if str(repo_root) not in sys.path:
 		sys.path.insert(0, str(repo_root))
 
-	from macos_llm_file_cleanup.cli import main as cli_main
+	from rename_n_sort.cli import main as cli_main
 
 	cli_main()
 
