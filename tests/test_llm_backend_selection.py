@@ -5,7 +5,7 @@ Tests for CLI LLM backend selection.
 
 from rename_n_sort.cli import build_llm
 from rename_n_sort.config import AppConfig
-from rename_n_sort.llm import AppleLLM, OllamaChatLLM
+from rename_n_sort.llm import AppleLLM, FallbackLLM, OllamaChatLLM
 
 
 def test_backend_macos_default(monkeypatch):
@@ -13,8 +13,19 @@ def test_backend_macos_default(monkeypatch):
 	cfg.llm_backend = "macos"
 	import rename_n_sort.cli as cli
 	monkeypatch.setattr(cli, "apple_models_available", lambda: True)
+	monkeypatch.setattr(cli, "_ollama_available", lambda _url: False)
 	llm = build_llm(cfg)
 	assert isinstance(llm, AppleLLM)
+
+
+def test_backend_macos_with_fallback(monkeypatch):
+	cfg = AppConfig(roots=[])
+	cfg.llm_backend = "macos"
+	import rename_n_sort.cli as cli
+	monkeypatch.setattr(cli, "apple_models_available", lambda: True)
+	monkeypatch.setattr(cli, "_ollama_available", lambda _url: True)
+	llm = build_llm(cfg)
+	assert isinstance(llm, FallbackLLM)
 
 
 def test_backend_macos_falls_back_to_ollama(monkeypatch):

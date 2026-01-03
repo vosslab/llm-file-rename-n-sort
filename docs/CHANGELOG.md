@@ -26,6 +26,7 @@
 - Add OCR/rendering status and sample text logging for images and short PDFs.
 - Avoid keeping numeric/generic original stems and normalize placeholder reasons.
 - Let the LLM decide keep-original without extra heuristics; suppress placeholder keep reasons.
+- Add a fallback LLM wrapper to use Ollama when Apple guardrails block content; skip files on LLM failures.
 - Add mutually exclusive randomize/sorted CLI ordering with randomize as the default.
 - Adjust LLM prompts to request XML-only replies with minimal chatter.
 

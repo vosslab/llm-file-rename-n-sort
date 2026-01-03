@@ -5,7 +5,7 @@ Local-first macOS tool that scans Downloads, Desktop, and Documents, extracts me
 ## Capabilities
 - Recursively scan messy folders with extension filters and file limits.
 - Extract metadata via dedicated plugins per file type; fall back to a generic mdls/stat reader.
-- Ask Apple Foundation Models (local) for a new file name and category, with Ollama as a backup.
+- Ask Apple Foundation Models (local) for a new file name and category, with Ollama as a backup on guardrail blocks.
 - Apply safe renames/moves with collision avoidance; dry run by default.
 
 ## Supported file types (v1)

@@ -14,7 +14,7 @@ import sys
 
 # local repo modules
 from .config import AppConfig, parse_exts
-from .llm import AppleLLM, OllamaLLM, apple_models_available, choose_model
+from .llm import AppleLLM, FallbackLLM, OllamaLLM, apple_models_available, choose_model
 from .organizer import Organizer
 from .scanner import iter_files
 
@@ -190,7 +190,11 @@ def build_llm(config: AppConfig):
 			logging.warning("Apple Foundation Models unavailable; using Ollama backup.")
 			return OllamaLLM(model=model, system_message=system_prompt, base_url=base_url)
 		raise RuntimeError("No available LLM backend (Apple Foundation Models or Ollama).")
-	return AppleLLM(model=model, system_message=system_prompt)
+	primary = AppleLLM(model=model, system_message=system_prompt)
+	if _ollama_available(base_url):
+		fallback = OllamaLLM(model=model, system_message=system_prompt, base_url=base_url)
+		return FallbackLLM(primary=primary, fallback=fallback)
+	return primary
 
 
 #============================================

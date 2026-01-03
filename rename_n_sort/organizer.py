@@ -221,7 +221,12 @@ class Organizer:
 				self._print_separator()
 			first = False
 			print(f"{self._color('[FILE]', '34')} {self._display_path(path)}")
-			plan, summary = self._plan_one(path, index=0)
+			try:
+				plan, summary = self._plan_one(path, index=0)
+			except Exception as exc:
+				self._print_why("error", f"{exc.__class__.__name__}: {exc}")
+				self._print_why("action", "skipping file due to LLM error")
+				continue
 			desc = summary.get("description", "") or ""
 			self._print_why("desc", desc)
 			self._print_why("rename_reason", plan.rename_reason)
