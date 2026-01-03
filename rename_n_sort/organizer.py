@@ -5,6 +5,7 @@ Core organizer: metadata -> LLM -> rename plan.
 
 # Standard Library
 import logging
+from datetime import datetime, timezone
 from dataclasses import dataclass
 from pathlib import Path
 import sys
@@ -98,6 +99,33 @@ class Organizer:
 		return source.parent / "Organized"
 
 	#============================================
+	def _print_dry_run_summary(self, plans: list[PlannedChange]) -> None:
+		if not plans:
+			return
+		tag = self._color("[SUMMARY]", "36")
+		print(f"{tag} Dry run target structure")
+		grouped: dict[str, dict[str, list[str]]] = {}
+		for plan in plans:
+			target_root = self._target_root_for_source(plan.source)
+			root_label = str(target_root)
+			try:
+				rel_path = plan.target.resolve().relative_to(target_root.resolve())
+			except Exception:
+				rel_path = Path(plan.target.name)
+			dir_key = rel_path.parent.as_posix()
+			if dir_key == ".":
+				dir_key = ""
+			grouped.setdefault(root_label, {}).setdefault(dir_key, []).append(rel_path.name)
+		for root_label in sorted(grouped.keys()):
+			print(f"{tag} {root_label}/")
+			for dir_key in sorted(grouped[root_label].keys()):
+				if dir_key:
+					print(f"  {dir_key}/")
+				for name in sorted(grouped[root_label][dir_key]):
+					prefix = "    " if dir_key else "  "
+					print(f"{prefix}{name}")
+
+	#============================================
 	def _print_pair(self, label: str, left: str, right: str, detail: str = "") -> None:
 		tag = f"[{label}]"
 		colored = self._color(tag, "36")
@@ -140,9 +168,18 @@ class Organizer:
 				handle.write(f"FILE: {self._display_path(path)}\n")
 				handle.write(f"keep_original={str(keep_original).lower()}\n")
 				handle.write(f"reason={reason}\n")
-				handle.write(raw_text.strip() + "\n")
+				raw = raw_text.strip()
+				handle.write("raw_response=\n")
+				handle.write(raw + "\n")
 		except Exception:
 			return
+
+	#============================================
+	def _build_sort_description(self, meta_payload: dict) -> str:
+		filetype_hint = meta_payload.get("filetype_hint") if meta_payload else ""
+		title = meta_payload.get("title") if meta_payload else ""
+		parts = [part for part in (filetype_hint, title) if part]
+		return " - ".join(parts)
 
 	#============================================
 	def _normalize_text(self, text: str) -> str:
@@ -192,11 +229,12 @@ class Organizer:
 			keep_raw=keep_raw,
 		)
 		self._log_keep_original_raw(path, keep_raw, keep_original, keep_reason)
+		sort_description = self._build_sort_description(meta_payload)
 		summary = SortItem(
 			path=str(path.resolve()),
 			name=new_name,
 			ext=path.suffix.lstrip("."),
-			description=meta_payload.get("summary") or meta_payload.get("description") or "",
+			description=sort_description,
 		)
 		return (plan, summary)
 
@@ -208,6 +246,17 @@ class Organizer:
 		if not llm:
 			raise RuntimeError("Organizer requires a configured LLM backend.")
 		self.llm = llm
+		self._reset_run_logs()
+
+	#============================================
+	def _reset_run_logs(self) -> None:
+		start_line = f"RUN_START {datetime.now(timezone.utc).isoformat(timespec='seconds')}\n"
+		for log_path in ("KEEP_ORIGINAL.log", "XML_PARSE_FAILURES.log"):
+			try:
+				with open(log_path, "w", encoding="utf-8") as handle:
+					handle.write(start_line)
+			except Exception:
+				continue
 
 	#============================================
 	def plan(self, files: list[Path] | None = None) -> list[PlannedChange]:
@@ -262,6 +311,8 @@ class Organizer:
 				f"(category={plan.category}, plugin={plan.plugin})",
 			)
 			self._print_why("category_reason", plan.category_reason)
+		if self.config.dry_run:
+			self._print_dry_run_summary(plans)
 		return plans
 
 	#============================================
@@ -307,8 +358,13 @@ class Organizer:
 				plan.new_name,
 				f"(plugin={plan.plugin})",
 			)
-			result = self.llm.sort([summary])
-			selection = result.assignments.get(summary.path, "Other")
+			try:
+				result = self.llm.sort([summary])
+				selection = result.assignments.get(summary.path, "Other")
+			except Exception as exc:
+				self._print_why("error", f"{exc.__class__.__name__}: {exc}")
+				self._print_why("action", "using fallback category Other")
+				selection = "Other"
 			category = selection.split("/")[0] if selection else "Other"
 			plan.category = category
 			plan.target = self._target_path(plan.source, plan.new_name, category)
@@ -336,6 +392,8 @@ class Organizer:
 						f"(category={plan.category}, plugin={plan.plugin})",
 					)
 			plans.append(plan)
+		if self.config.dry_run:
+			self._print_dry_run_summary(plans)
 		return plans
 
 	#============================================

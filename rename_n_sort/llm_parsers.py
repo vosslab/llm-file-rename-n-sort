@@ -11,14 +11,13 @@ import html
 import re
 
 # local repo modules
-from .llm_utils import extract_xml_tag_content
 
 #============================================
 
 
 class ParseError(RuntimeError):
 	"""
-	Raised when a model response does not match required XML.
+	Raised when a model response does not match required tags.
 	"""
 
 	def __init__(self, message: str, raw_text: str = "") -> None:
@@ -63,44 +62,55 @@ def _strip_code_fences(text: str) -> str:
 
 def _coerce_response_body(text: str) -> str:
 	cleaned = _strip_code_fences(text).strip().strip('"').strip("'")
-	response_body = extract_xml_tag_content(cleaned, "response")
-	if not response_body and "&lt;response" in cleaned.lower():
+	if "&lt;" in cleaned:
 		unescaped = html.unescape(cleaned)
-		response_body = extract_xml_tag_content(unescaped, "response")
-	if response_body and "<response" in response_body.lower():
-		response_body = extract_xml_tag_content(response_body, "response")
-	if not response_body and (
-		"<keep_original" in cleaned.lower()
-		or "<new_name" in cleaned.lower()
-		or "<file" in cleaned.lower()
-	):
-		return cleaned
-	return response_body
+		if unescaped:
+			cleaned = unescaped
+	return cleaned
 
 
-def _extract_reason_text(response_body: str) -> str:
-	reason_text = extract_xml_tag_content(response_body, "reason")
-	if reason_text:
-		return reason_text
-	match = re.search(r"<reason\b([^>/]*?)/?>", response_body, flags=re.IGNORECASE)
-	if not match:
-		return ""
-	attrs = match.group(1).strip()
-	if not attrs:
-		return ""
-	return html.unescape(" ".join(attrs.split()))
+def _find_tag_values(text: str, tag: str) -> list[str]:
+	pattern = re.compile(
+		rf"<{tag}\b[^>]*>(.*?)</{tag}>",
+		flags=re.IGNORECASE | re.DOTALL,
+	)
+	return [match.strip() for match in pattern.findall(text)]
+
+
+_PROMPT_LEAK_PHRASES = (
+	"previous reply did not match",
+	"do not include",
+	"return only",
+	"schema",
+	"tags below",
+)
+
+
+def _contains_prompt_leak(text: str) -> bool:
+	if not text:
+		return False
+	lower = text.lower()
+	return any(phrase in lower for phrase in _PROMPT_LEAK_PHRASES)
 
 
 def parse_rename_response(text: str) -> RenameResult:
 	response_body = _coerce_response_body(text)
 	if not response_body:
 		raise ParseError("Missing required tags in rename response.", text)
-	new_name = extract_xml_tag_content(response_body, "new_name")
-	reason = _extract_reason_text(response_body)
-	if not new_name:
+	new_names = _find_tag_values(response_body, "new_name")
+	if not new_names:
 		raise ParseError("Missing <new_name> in rename response.", text)
-	if not reason:
+	if len(new_names) > 1:
+		raise ParseError("Duplicate <new_name> tags in rename response.", text)
+	reasons = _find_tag_values(response_body, "reason")
+	if not reasons:
 		raise ParseError("Missing <reason> in rename response.", text)
+	if len(reasons) > 1:
+		raise ParseError("Duplicate <reason> tags in rename response.", text)
+	new_name = new_names[0]
+	reason = reasons[0]
+	if _contains_prompt_leak(reason):
+		raise ParseError("Reason appears to echo prompt instructions.", text)
 	return RenameResult(new_name=new_name, reason=reason, raw_text=text)
 
 def parse_keep_response(
@@ -109,21 +119,22 @@ def parse_keep_response(
 	response_body = _coerce_response_body(text)
 	if not response_body:
 		raise ParseError("Missing required tags in keep response.", text)
-	keep_text = extract_xml_tag_content(response_body, "keep_original").strip().lower()
-	reason = _extract_reason_text(response_body)
-	if not keep_text:
+	keep_values = _find_tag_values(response_body, "keep_original")
+	if not keep_values:
 		raise ParseError("Missing <keep_original> in keep response.", text)
+	if len(keep_values) > 1:
+		raise ParseError("Duplicate <keep_original> tags in keep response.", text)
+	reason_values = _find_tag_values(response_body, "reason")
+	if not reason_values:
+		raise ParseError("Missing <reason> in keep response.", text)
+	if len(reason_values) > 1:
+		raise ParseError("Duplicate <reason> tags in keep response.", text)
+	keep_text = keep_values[0].strip().lower()
+	reason = reason_values[0]
 	keep = keep_text.startswith("t") or keep_text == "1" or keep_text == "yes"
-	if not reason:
-		if require_stem_reason:
-			raise ParseError("Missing <reason> in keep response.", text)
-		reason = ""
 	reason = reason.replace('\\"', '"').replace("\\'", "'")
-	expected = f'original_stem="{original_stem}"'
-	if reason and reason.count(expected) != 1:
-		if require_stem_reason:
-			raise ParseError("Keep reason must include original_stem exactly once.", text)
-		reason = ""
+	if reason and _contains_prompt_leak(reason):
+		raise ParseError("Reason appears to echo prompt instructions.", text)
 	return KeepResult(keep_original=keep, reason=reason, raw_text=text)
 
 
@@ -131,20 +142,12 @@ def parse_sort_response(text: str, expected_paths: list[str]) -> SortResult:
 	response_body = _coerce_response_body(text)
 	if not response_body:
 		raise ParseError("Missing required tags in sort response.", text)
-	mapping: dict[str, str] = {}
-	for match in re.finditer(
-		r"<file\b[^>]*\bpath\s*=\s*[\"']([^\"']+)[\"'][^>]*>(.*?)</file>",
-		response_body,
-		flags=re.IGNORECASE | re.DOTALL,
-	):
-		path = match.group(1).strip()
-		value = match.group(2).strip()
-		if not path or not value:
-			raise ParseError("Empty file path or category in sort response.")
-		if path in mapping:
-			raise ParseError("Duplicate file path in sort response.")
-		mapping[path] = value
-	missing = [p for p in expected_paths if p not in mapping]
-	if missing:
-		raise ParseError(f"Missing file paths in sort response: {missing[:3]}")
-	return SortResult(assignments=mapping, raw_text=text)
+	if len(expected_paths) != 1:
+		raise ParseError("Sort responses only support a single file.", text)
+	categories = _find_tag_values(response_body, "category")
+	if not categories:
+		raise ParseError("Missing <category> in sort response.", text)
+	if len(categories) > 1:
+		raise ParseError("Duplicate <category> tags in sort response.", text)
+	category = categories[0].strip()
+	return SortResult(assignments={expected_paths[0]: category}, raw_text=text)

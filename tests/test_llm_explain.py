@@ -9,17 +9,17 @@ from rename_n_sort.llm_utils import extract_xml_tag_content
 
 def test_parse_keep_response():
 	result = parse_keep_response(
-		"<response><keep_original>false</keep_original>"
-		"<reason>flagged original_stem=\"abc123\"</reason></response>",
+		"<keep_original>false</keep_original>"
+		"<reason>too generic</reason>",
 		"abc123",
 	)
 	assert result.keep_original is False
-	assert "abc123" in result.reason
+	assert "generic" in result.reason
 
 
 def test_parse_rename_response():
 	result = parse_rename_response(
-		"<response><new_name>My_File.pdf</new_name><reason>title + date</reason></response>"
+		"<new_name>My_File.pdf</new_name><reason>title + date</reason>"
 	)
 	assert result.new_name == "My_File.pdf"
 	assert "title" in result.reason.lower()
@@ -27,21 +27,17 @@ def test_parse_rename_response():
 
 def test_parse_rename_response_with_code_fence():
 	result = parse_rename_response(
-		"```xml\n<response><new_name>My_File.pdf</new_name><reason>title</reason></response>\n```"
+		"```xml\n<new_name>My_File.pdf</new_name><reason>title</reason>\n```"
 	)
 	assert result.new_name == "My_File.pdf"
 
 
 def test_parse_sort_response_expected_paths():
 	result = parse_sort_response(
-		"<response>"
-		"<file path=\"/tmp/a.pdf\">Document</file>"
-		"<file path=\"/tmp/b.png\">Image</file>"
-		"</response>",
-		["/tmp/a.pdf", "/tmp/b.png"],
+		"<category>Document</category>",
+		["/tmp/a.pdf"],
 	)
 	assert result.assignments["/tmp/a.pdf"] == "Document"
-	assert result.assignments["/tmp/b.png"] == "Image"
 
 
 def test_extracts_last_response_block():

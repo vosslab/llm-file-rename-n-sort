@@ -35,19 +35,20 @@ def test_format_fix_retry_on_parse_error():
 	transport = DummyTransport(
 		responses=[
 			"not xml",
-			"<response><new_name>Good.pdf</new_name><reason>title</reason></response>",
+			"<new_name>Good.pdf</new_name><reason>title</reason>",
 		]
 	)
 	engine = LLMEngine(transports=[transport])
 	result = engine.rename("old.pdf", {"extension": "pdf"})
 	assert result.new_name == "Good.pdf"
 	assert len(transport.calls) == 2
+	assert transport.calls[0][1] != transport.calls[1][1]
 
 
 def test_guardrail_fallback_to_second_transport():
 	guardrail = DummyTransport(error=GuardrailViolationError("guardrail"))
 	ok = DummyTransport(
-		responses=["<response><new_name>Ok.pdf</new_name><reason>title</reason></response>"]
+		responses=["<new_name>Ok.pdf</new_name><reason>title</reason>"]
 	)
 	engine = LLMEngine(transports=[guardrail, ok])
 	result = engine.rename("old.pdf", {"extension": "pdf"})
@@ -60,7 +61,7 @@ def test_guardrail_retry_minimal_prompt_on_first_transport():
 	class FlakyGuardrail(DummyTransport):
 		def __init__(self):
 			super().__init__(responses=[
-				"<response><new_name>Ok.pdf</new_name><reason>title</reason></response>"
+				"<new_name>Ok.pdf</new_name><reason>title</reason>"
 			])
 			self.first = True
 
@@ -80,7 +81,7 @@ def test_guardrail_retry_minimal_prompt_on_first_transport():
 def test_parse_failure_falls_back_to_second_transport_on_format_fix():
 	first = DummyTransport(responses=["not xml", "still bad"])
 	second = DummyTransport(
-		responses=["<response><new_name>Fixed.pdf</new_name><reason>ok</reason></response>"]
+		responses=["<new_name>Fixed.pdf</new_name><reason>ok</reason>"]
 	)
 	engine = LLMEngine(transports=[first, second])
 	result = engine.rename("old.pdf", {"extension": "pdf"})
@@ -95,7 +96,7 @@ def test_guardrail_then_format_fix_falls_back_to_second_transport():
 	second = DummyTransport(
 		responses=[
 			"not xml",
-			"<response><new_name>Ok.pdf</new_name><reason>ok</reason></response>",
+			"<new_name>Ok.pdf</new_name><reason>ok</reason>",
 		]
 	)
 	engine = LLMEngine(transports=[guardrail, second])
@@ -111,7 +112,7 @@ def test_context_window_retry_minimal_prompt_on_first_transport():
 		def __init__(self):
 			super().__init__(
 				responses=[
-					"<response><new_name>Ok.pdf</new_name><reason>title</reason></response>"
+					"<new_name>Ok.pdf</new_name><reason>title</reason>"
 				]
 			)
 			self.first = True
@@ -129,14 +130,15 @@ def test_context_window_retry_minimal_prompt_on_first_transport():
 	assert engine.transports[0].calls[0][1] != engine.transports[0].calls[1][1]
 
 
-def test_keep_original_allows_missing_stem_reason():
-	bad = DummyTransport(
+def test_keep_original_requires_reason():
+	transport = DummyTransport(
 		responses=[
-			"<response><keep_original>true</keep_original>"
-			"<reason>One sentence. Refer to one feature flag.</reason></response>"
+			"<keep_original>true</keep_original>",
+			"<keep_original>true</keep_original><reason>short stem is meaningful</reason>",
 		]
 	)
-	engine = LLMEngine(transports=[bad])
+	engine = LLMEngine(transports=[transport])
 	result = engine.keep_original("Budget-Report-2024", "Annual_Report_2024")
 	assert result.keep_original is True
-	assert result.reason == ""
+	assert "meaningful" in result.reason
+	assert transport.calls[0][1] != transport.calls[1][1]

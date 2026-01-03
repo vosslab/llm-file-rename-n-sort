@@ -10,30 +10,28 @@ from rename_n_sort.llm_parsers import ParseError, parse_keep_response, parse_ren
 
 def test_parse_rename_missing_response_raises():
 	with pytest.raises(ParseError):
-		parse_rename_response("no xml here")
+		parse_rename_response("no tags here")
 
 
 def test_parse_rename_missing_name_raises():
 	with pytest.raises(ParseError):
-		parse_rename_response("<response><reason>why</reason></response>")
+		parse_rename_response("<reason>why</reason>")
 
 
 def test_parse_keep_missing_reason_raises():
 	with pytest.raises(ParseError):
 		parse_keep_response(
-			"<response><keep_original>true</keep_original></response>",
+			"<keep_original>true</keep_original>",
 			"abc",
-			require_stem_reason=True,
 		)
 
 
-def test_parse_keep_requires_stem_once():
+def test_parse_keep_duplicate_reason_raises():
 	with pytest.raises(ParseError):
 		parse_keep_response(
-			"<response><keep_original>true</keep_original>"
-			"<reason>original_stem=\"abc\" and original_stem=\"abc\"</reason></response>",
+			"<keep_original>true</keep_original>"
+			"<reason>one</reason><reason>two</reason>",
 			"abc",
-			require_stem_reason=True,
 		)
 
 
@@ -52,43 +50,34 @@ def test_parse_keep_requires_stem_once():
 )
 def test_parse_keep_boolean_variants(keep_value, expected):
 	result = parse_keep_response(
-		f"<response><keep_original>{keep_value}</keep_original>"
-		"<reason>original_stem=\"abc\"</reason></response>",
+		f"<keep_original>{keep_value}</keep_original>"
+		"<reason>stem looks numeric</reason>",
 		"abc",
 	)
 	assert result.keep_original is expected
 
 
-def test_parse_keep_requires_exact_stem_match():
+def test_parse_keep_duplicate_keep_original_raises():
 	with pytest.raises(ParseError):
 		parse_keep_response(
-			"<response><keep_original>true</keep_original>"
-			"<reason>original_stem=\"Abc\"</reason></response>",
+			"<keep_original>true</keep_original>"
+			"<keep_original>false</keep_original>"
+			"<reason>two values</reason>",
 			"abc",
-			require_stem_reason=True,
 		)
 
 
-def test_parse_keep_lenient_missing_reason():
-	result = parse_keep_response("<response><keep_original>true</keep_original></response>", "abc")
-	assert result.keep_original is True
-	assert result.reason == ""
-
-
-def test_parse_sort_duplicate_paths_raises():
+def test_parse_sort_duplicate_category_raises():
 	with pytest.raises(ParseError):
 		parse_sort_response(
-			"<response>"
-			"<file path=\"/tmp/a.pdf\">Document</file>"
-			"<file path=\"/tmp/a.pdf\">Image</file>"
-			"</response>",
+			"<category>Document</category><category>Image</category>",
 			["/tmp/a.pdf"],
 		)
 
 
-def test_parse_sort_missing_path_raises():
+def test_parse_sort_missing_category_raises():
 	with pytest.raises(ParseError):
 		parse_sort_response(
-			"<response><file path=\"/tmp/a.pdf\">Document</file></response>",
-			["/tmp/a.pdf", "/tmp/b.pdf"],
+			"no category tag here",
+			["/tmp/a.pdf"],
 		)

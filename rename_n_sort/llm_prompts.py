@@ -48,15 +48,15 @@ class SortRequest:
 	context: str | None = None
 
 
-RENAME_SCHEMA_XML = (
-	"<new_name>NAME_WITH_EXTENSION</new_name>\n"
-	"<reason>short reason (5-12 words)</reason>"
+RENAME_EXAMPLE_OUTPUT = (
+	"<new_name>Invoice_20240115_Acorn_Supply.pdf</new_name>\n"
+	"<reason>invoice with vendor and date</reason>"
 )
-KEEP_SCHEMA_XML = (
-	"<keep_original>true|false</keep_original>\n"
-	"<reason>original_stem=\"...\" feature_flag=... short reason</reason>"
+KEEP_EXAMPLE_OUTPUT = (
+	"<keep_original>false</keep_original>\n"
+	"<reason>stem is numeric and generic</reason>"
 )
-SORT_SCHEMA_XML = "<file path=\"/path/to/file.ext\">Category</file>"
+SORT_EXAMPLE_OUTPUT = "<category>Document</category>"
 
 
 def build_rename_prompt(req: RenameRequest) -> str:
@@ -78,7 +78,8 @@ def build_rename_prompt(req: RenameRequest) -> str:
 	lines.append("Avoid filler adjectives like vibrant/beautiful.")
 	lines.append("Return only the tags shown below. Do not include code fences.")
 	lines.append("Do not wrap tags in any outer container.")
-	lines.append(RENAME_SCHEMA_XML)
+	lines.append("Example output:")
+	lines.append(RENAME_EXAMPLE_OUTPUT)
 	title = _sanitize_prompt_text(req.metadata.get("title"), max_chars=200)
 	keywords = _sanitize_prompt_list(req.metadata.get("keywords"))
 	description = _sanitize_prompt_text(
@@ -122,7 +123,8 @@ def build_rename_prompt_minimal(req: RenameRequest) -> str:
 	lines.append("Include a date only if clearly present and important (format YYYYMMDD).")
 	lines.append("Return only the tags shown below. Do not include code fences.")
 	lines.append("Do not wrap tags in any outer container.")
-	lines.append(RENAME_SCHEMA_XML)
+	lines.append("Example output:")
+	lines.append(RENAME_EXAMPLE_OUTPUT)
 	title = _sanitize_prompt_text(req.metadata.get("title"), max_chars=200)
 	excerpt = _prompt_excerpt(req.metadata)
 	filetype_hint = _sanitize_prompt_text(req.metadata.get("filetype_hint"))
@@ -155,14 +157,11 @@ def build_keep_prompt(req: KeepRequest) -> str:
 		"Rule 6: Otherwise keep_original=true if has_letter=true AND "
 		"(length <= 48 OR token_count <= 8) AND stem_in_suggested=false. Else false."
 	)
-	lines.append(
-		f"Reason must include original_stem=\"{req.original_stem}\" exactly once."
-	)
-	lines.append("Do not repeat the schema text verbatim; populate real values.")
 	lines.append("Reason must not mention rules or instructions.")
 	lines.append("Return only the tags shown below. Do not include code fences.")
 	lines.append("Do not wrap tags in any outer container.")
-	lines.append(KEEP_SCHEMA_XML)
+	lines.append("Example output:")
+	lines.append(KEEP_EXAMPLE_OUTPUT)
 	lines.append(f"original_stem: {req.original_stem}")
 	lines.append(f"suggested_name: {req.suggested_name}")
 	lines.append("features:")
@@ -175,27 +174,32 @@ def build_sort_prompt(req: SortRequest) -> str:
 	lines: list[str] = []
 	if req.context:
 		lines.append(f"Context: {req.context}")
-	lines.append("Sorting mode: assign an allowed category to each file path.")
+	lines.append("Sorting mode: assign an allowed category to the file below.")
+	lines.append("Do not output JSON.")
+	lines.append("Do not use backticks or code blocks.")
 	lines.append("Allowed categories:")
 	for cat in ALLOWED_CATEGORIES:
 		lines.append(f"- {cat}")
-	lines.append("Files:")
-	for item in req.files:
-		lines.append(
-			f"path={item.path} | name={item.name} | ext={item.ext} | desc={item.description}"
-		)
+	lines.append("File:")
+	item = req.files[0]
+	lines.append(
+		f"path={item.path} | name={item.name} | ext={item.ext} | desc={item.description}"
+	)
+	lines.append("If you cannot follow the format, output only the required tags, nothing else.")
 	lines.append("Return only the tags shown below. Do not include code fences.")
 	lines.append("Do not wrap tags in any outer container.")
-	lines.append(SORT_SCHEMA_XML)
+	lines.append("Example output:")
+	lines.append(SORT_EXAMPLE_OUTPUT)
 	return "\n".join(lines)
 
 
-def build_format_fix_prompt(original_prompt: str, schema_xml: str) -> str:
+def build_format_fix_prompt(original_prompt: str, example_output: str) -> str:
 	lines = [
 		"Your previous reply did not match the required tags.",
+		"Do not output JSON.",
+		"Do not use backticks or code blocks.",
 		"Output only the tags below with no extra text.",
-		schema_xml,
+		example_output,
 		"",
-		original_prompt,
 	]
 	return "\n".join(lines)

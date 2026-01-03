@@ -15,9 +15,9 @@ from .llm_prompts import (
 	RenameRequest,
 	SortItem,
 	SortRequest,
-	RENAME_SCHEMA_XML,
-	KEEP_SCHEMA_XML,
-	SORT_SCHEMA_XML,
+	RENAME_EXAMPLE_OUTPUT,
+	KEEP_EXAMPLE_OUTPUT,
+	SORT_EXAMPLE_OUTPUT,
 	build_format_fix_prompt,
 	build_keep_prompt,
 	build_rename_prompt,
@@ -56,7 +56,7 @@ class LLMEngine:
 		result = self._parse_with_retry(
 			lambda text: parse_rename_response(text),
 			prompt,
-			RENAME_SCHEMA_XML,
+			RENAME_EXAMPLE_OUTPUT,
 			raw,
 			purpose="filename based on content",
 			max_tokens=200,
@@ -82,7 +82,7 @@ class LLMEngine:
 			result = self._parse_with_retry(
 				lambda text: parse_keep_response(text, original_stem),
 				prompt,
-				KEEP_SCHEMA_XML,
+				KEEP_EXAMPLE_OUTPUT,
 				raw,
 				purpose="if original filename should be kept",
 				max_tokens=120,
@@ -99,23 +99,30 @@ class LLMEngine:
 
 	#============================================
 	def sort(self, files: list[SortItem]) -> SortResult:
-		req = SortRequest(files=files, context=self.context)
-		prompt = build_sort_prompt(req)
-		raw = self._generate_with_fallback(
-			prompt,
-			purpose="category assignment",
-			max_tokens=240,
-			retry_prompt=None,
-		)
-		expected_paths = [item.path for item in files]
-		return self._parse_with_retry(
-			lambda text: parse_sort_response(text, expected_paths),
-			prompt,
-			SORT_SCHEMA_XML,
-			raw,
-			purpose="category assignment",
-			max_tokens=240,
-		)
+		if not files:
+			return SortResult(assignments={}, raw_text="")
+		assignments: dict[str, str] = {}
+		last_raw = ""
+		for item in files:
+			req = SortRequest(files=[item], context=self.context)
+			prompt = build_sort_prompt(req)
+			raw = self._generate_with_fallback(
+				prompt,
+				purpose="category assignment",
+				max_tokens=120,
+				retry_prompt=None,
+			)
+			result = self._parse_with_retry(
+				lambda text: parse_sort_response(text, [item.path]),
+				prompt,
+				SORT_EXAMPLE_OUTPUT,
+				raw,
+				purpose="category assignment",
+				max_tokens=120,
+			)
+			assignments.update(result.assignments)
+			last_raw = result.raw_text
+		return SortResult(assignments=assignments, raw_text=last_raw)
 
 	#============================================
 	def _generate_with_fallback(
@@ -158,7 +165,7 @@ class LLMEngine:
 		self,
 		parser,
 		original_prompt: str,
-		schema_xml: str,
+		example_output: str,
 		raw_text: str,
 		*,
 		purpose: str,
@@ -176,7 +183,7 @@ class LLMEngine:
 				prompt=original_prompt,
 				stage="initial",
 			)
-			fix_prompt = build_format_fix_prompt(original_prompt, schema_xml)
+			fix_prompt = build_format_fix_prompt(original_prompt, example_output)
 			last_parse: ParseError | None = None
 			last_transport: Exception | None = None
 			last_fixed: str | None = None

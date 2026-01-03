@@ -18,6 +18,12 @@
 - Remove JSON/YAML config file support in favor of explicit CLI arguments.
 - Switch XML parsing to a last-tag extraction strategy for chatty LLM outputs.
 - Include caption + OCR context with guidance notes in rename prompts.
+- Add EPUB support via OPF metadata parsing, plus a sample EPUB fixture and extraction test.
+- Make test file extraction checks parameterized per extension and align prompt tests with tag-only instructions.
+- Tighten sort prompts against JSON/code blocks, strip triple backticks from prompt text, and simplify sort descriptions to filetype + title.
+- Simplify keep-original logging to store only parsed values plus raw response.
+- Shift LLM prompts to example-driven flat tags, drop original-stem echoes, and simplify sort output to a single <category> tag.
+- Update parsers to require unique tag names while ignoring extra chatter, and remove JSON fallbacks.
 - Refine rename/keep prompts to emphasize human-readable filenames and reduce noisy tokens.
 - For PDFs with two pages or fewer, render pages to images and use OCR+captioning instead of plain text extraction.
 - Replace PDF rasterization via pyvips/libvips with pdf2image/poppler for more stable OCR rendering.
@@ -62,6 +68,13 @@
 - Accept rename/sort responses without a <response> wrapper when tags are present.
 - Treat `<reason ...>` attributes as reason text when the reason body is missing.
 - Update LLM prompts to request flat tags without XML wrappers or XML wording.
+- Add tolerant parsing for prompt-echoed reasons and update keep-original logging with raw excerpts.
+- Allow single-file sort parsing from JSON or a lone category line.
+- Accept keep-original JSON responses when tags are missing.
+- Write a RUN_START header at the top of keep-original and parse-failure logs.
+- Clear KEEP_ORIGINAL.log and XML_PARSE_FAILURES.log at the start of each run.
+- Add a dry-run summary of target directories and filenames after planning.
+- Fall back to category "Other" if sorting fails during one-by-one processing.
 - Remove "XML" wording from AppleLLM instructions; request tags only.
 - Remove Apple-specific tag-return instruction to keep prompts backend-agnostic.
 - Remove Apple-specific system instruction text to keep prompts fully shared.

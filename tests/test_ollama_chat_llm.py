@@ -10,7 +10,7 @@ def test_rename_prompt_includes_current_name():
 	req = RenameRequest(metadata={"extension": "pdf"}, current_name="old.pdf")
 	prompt = build_rename_prompt(req)
 	assert "current_name: old.pdf" in prompt
-	assert "Return XML only" in prompt
+	assert "Return only the tags shown below" in prompt
 
 
 def test_keep_prompt_requires_stem_reason():
@@ -20,5 +20,6 @@ def test_keep_prompt_requires_stem_reason():
 		features={"has_letter": True},
 	)
 	prompt = build_keep_prompt(req)
-	assert 'original_stem="ABC123"' in prompt
 	assert "Reason must not mention rules" in prompt
+	assert "<keep_original>" in prompt
+	assert "<reason>" in prompt

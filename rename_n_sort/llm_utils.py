@@ -145,7 +145,8 @@ def normalize_reason(reason: str | None) -> str:
 	if lower in _PLACEHOLDER_REASONS or plain in _PLACEHOLDER_REASONS:
 		return ""
 	if "short justification" in lower or "short reason" in lower:
-		return ""
+		if "original_stem=" not in lower and "feature_flag" not in lower:
+			return ""
 	if "justification" in lower and len(lower.split()) <= 3:
 		return ""
 	return cleaned
@@ -162,6 +163,7 @@ def _sanitize_prompt_text(
 	if not text:
 		return ""
 	text = text.replace("\r\n", "\n").replace("\r", "\n")
+	text = text.replace("```", " ")
 	text = _NONPRINTABLE_RE.sub(" ", text)
 	text = text.replace("\t", " ")
 	lines: list[str] = []

@@ -27,7 +27,7 @@ class DummyTransport:
 def test_rename_sanitizes_filename_and_reason():
 	transport = DummyTransport(
 		responses=[
-			"<response><new_name>Bad Name/?.pdf</new_name><reason>short reason</reason></response>"
+			"<new_name>Bad Name/?.pdf</new_name><reason>contains invalid chars</reason>"
 		]
 	)
 	engine = LLMEngine(transports=[transport])
@@ -37,16 +37,15 @@ def test_rename_sanitizes_filename_and_reason():
 	assert "?" not in result.new_name
 	assert result.new_name.endswith(".pdf")
 	assert len(result.new_name) <= MAX_FILENAME_CHARS
-	assert result.reason == ""
+	assert result.reason == "contains invalid chars"
 
 
 def test_keep_original_normalizes_placeholder_reason():
 	transport = DummyTransport(
 		responses=[
 			(
-				"<response><keep_original>true</keep_original>"
-				"<reason>short justification original_stem=\"Report\"</reason>"
-				"</response>"
+				"<keep_original>true</keep_original>"
+				"<reason>short justification</reason>"
 			)
 		]
 	)

@@ -3,18 +3,31 @@
 Prompt builder and sanitization tests.
 """
 
-from rename_n_sort.llm_prompts import RenameRequest, build_format_fix_prompt, build_rename_prompt
+from rename_n_sort.llm_prompts import (
+	KeepRequest,
+	RenameRequest,
+	SortItem,
+	SortRequest,
+	build_format_fix_prompt,
+	build_keep_prompt,
+	build_rename_prompt,
+	build_sort_prompt,
+)
 from rename_n_sort.llm_utils import _sanitize_prompt_text
 
 
-def test_format_fix_prompt_includes_schema_and_original():
+def test_format_fix_prompt_includes_example():
 	original = "original prompt text"
-	schema = "<response><new_name>X</new_name></response>"
-	prompt = build_format_fix_prompt(original, schema)
+	example = "<new_name>X.pdf</new_name><reason>invoice</reason>"
+	prompt = build_format_fix_prompt(original, example)
 	assert "previous reply did not match" in prompt.lower()
 	assert "tags below" in prompt.lower()
-	assert schema in prompt
-	assert original in prompt
+	assert example in prompt
+
+
+def test_format_fix_prompt_avoids_xml_word():
+	prompt = build_format_fix_prompt("prompt", "<new_name>X</new_name>")
+	assert "xml" not in prompt.lower()
 
 
 def test_sanitize_prompt_text_removes_long_tokens_and_duplicates():
@@ -38,3 +51,26 @@ def test_rename_prompt_includes_filetype_hint():
 	)
 	prompt = build_rename_prompt(req)
 	assert "filetype: ZIP archive" in prompt
+
+
+def test_prompts_avoid_response_and_short_reason():
+	req = RenameRequest(metadata={"extension": "pdf"}, current_name="old.pdf")
+	prompt = build_rename_prompt(req)
+	assert "<response>" not in prompt
+	assert "short reason" not in prompt.lower()
+	keep_prompt = build_keep_prompt(
+		KeepRequest(original_stem="A1", suggested_name="Report", features={})
+	)
+	assert "<response>" not in keep_prompt
+	assert "short reason" not in keep_prompt.lower()
+
+
+def test_sort_prompt_uses_category_only():
+	req = SortRequest(
+		files=[SortItem(path="/tmp/a.pdf", name="A", ext="pdf", description="")],
+		context=None,
+	)
+	prompt = build_sort_prompt(req)
+	assert "<category>" in prompt
+	assert "<file" not in prompt
+	assert "<response>" not in prompt

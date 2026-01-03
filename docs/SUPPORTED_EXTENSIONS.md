@@ -23,6 +23,10 @@ Notes
 - txt, md, rtf (DocumentPlugin)
   - Reads a short text preview (first ~800 chars).
 
+## Ebooks (content-aware)
+- epub (EpubPlugin)
+  - Reads OPF metadata (title/creator/subjects/description) from the archive.
+
 ## Documents (metadata-only)
 - pages
   - Title/metadata via mdls only.

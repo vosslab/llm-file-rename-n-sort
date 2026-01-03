@@ -7,6 +7,7 @@ from .code_plugin import CodePlugin
 from .csv_plugin import CSVPlugin
 from .document_plugin import DocumentPlugin
 from .docx_plugin import DocxPlugin
+from .epub_plugin import EpubPlugin
 from .generic import GenericPlugin
 from .html_plugin import HtmlPlugin
 from .image_plugin import ImagePlugin
@@ -37,6 +38,7 @@ def build_registry() -> PluginRegistry:
 	registry = PluginRegistry()
 	registry.register(PDFPlugin())
 	registry.register(DocxPlugin())
+	registry.register(EpubPlugin())
 	registry.register(HtmlPlugin())
 	registry.register(OdtPlugin())
 	registry.register(DocumentPlugin())

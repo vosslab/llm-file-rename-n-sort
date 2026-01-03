@@ -5,6 +5,7 @@ cpp
 csv
 doc
 docx
+epub
 gif
 htm
 html

@@ -8,6 +8,7 @@ from __future__ import annotations
 import argparse
 import random
 from pathlib import Path
+import zipfile
 
 from docx import Document
 from PIL import Image
@@ -84,6 +85,44 @@ def _write_gradient_image(path: Path) -> None:
 	image.save(path)
 
 
+def _write_epub(path: Path) -> None:
+	mimetype = "application/epub+zip"
+	container_xml = """<?xml version="1.0" encoding="UTF-8"?>
+<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+  <rootfiles>
+    <rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/>
+  </rootfiles>
+</container>
+"""
+	opf_xml = """<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" unique-identifier="BookId" version="2.0">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title>Sample EPUB Guide</dc:title>
+    <dc:creator>Test Author</dc:creator>
+    <dc:subject>Documentation</dc:subject>
+    <dc:description>A short sample EPUB file.</dc:description>
+  </metadata>
+  <manifest>
+    <item id="chap1" href="chapter1.xhtml" media-type="application/xhtml+xml"/>
+  </manifest>
+  <spine>
+    <itemref idref="chap1"/>
+  </spine>
+</package>
+"""
+	chapter_xml = """<?xml version="1.0" encoding="utf-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head><title>Sample EPUB Guide</title></head>
+  <body><p>This is a sample EPUB chapter.</p></body>
+</html>
+"""
+	with zipfile.ZipFile(path, "w") as archive:
+		archive.writestr("mimetype", mimetype, compress_type=zipfile.ZIP_STORED)
+		archive.writestr("META-INF/container.xml", container_xml)
+		archive.writestr("OEBPS/content.opf", opf_xml)
+		archive.writestr("OEBPS/chapter1.xhtml", chapter_xml)
+
+
 def generate_samples(output_dir: Path) -> None:
 	output_dir.mkdir(parents=True, exist_ok=True)
 	_write_text(output_dir / f"{_random_hex()}_story.txt")
@@ -96,6 +135,7 @@ def generate_samples(output_dir: Path) -> None:
 	_write_pdf(output_dir / f"{_random_hex()}_sheet.pdf")
 	_write_solid_image(output_dir / f"{_random_hex()}_solid.png")
 	_write_gradient_image(output_dir / f"{_random_hex()}_gradient.jpg")
+	_write_epub(output_dir / f"{_random_hex()}_sample.epub")
 
 
 def main() -> None:
