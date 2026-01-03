@@ -99,6 +99,7 @@ def parse_keep_response(
 		if require_stem_reason:
 			raise ParseError("Missing <reason> in keep response.", text)
 		reason = ""
+	reason = reason.replace('\\"', '"').replace("\\'", "'")
 	expected = f'original_stem="{original_stem}"'
 	if reason and reason.count(expected) != 1:
 		if require_stem_reason:

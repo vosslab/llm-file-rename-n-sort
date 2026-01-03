@@ -54,6 +54,7 @@
 - Add malformed XML parser tests for code fences, chatter, and unclosed tags.
 - Handle nested/escaped `<response>` blocks when Apple returns XML inside strings.
 - Update keep-original prompt schema to discourage template echoing and nested responses.
+- Fix folder-vs-file test to use the current organizer plan API and normalize escaped quotes in keep reasons.
 - Rename Apple transport label to AppleLLM in LLM logging.
 - Sanitize rename prompt content to strip non-printables, long tokens, and repeated lines.
 - Retry Apple rename prompts with a minimal title+excerpt prompt on guardrail errors before falling back.

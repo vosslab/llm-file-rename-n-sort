@@ -6,7 +6,7 @@ Shared LLM helpers (backend-agnostic).
 from __future__ import annotations
 
 # Standard Library
-from datetime import datetime
+from datetime import datetime, timezone
 import os
 import platform
 import re
@@ -83,7 +83,7 @@ def log_parse_failure(
 	Append parse failures to a log file for later review.
 	"""
 	try:
-		timestamp = datetime.utcnow().isoformat(timespec="seconds") + "Z"
+		timestamp = datetime.now(timezone.utc).isoformat(timespec="seconds")
 		parts = ["=" * 80, f"timestamp: {timestamp}", f"purpose: {purpose}"]
 		if stage:
 			parts.append(f"stage: {stage}")
