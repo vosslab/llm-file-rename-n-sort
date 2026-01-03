@@ -3,13 +3,13 @@ requires = ["setuptools>=64", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "macos-llm-file-cleanup"
+name = "llm-file-rename-n-sort"
 version = "26.01"
 description = "Local-first macOS organizer that uses metadata-aware plugins and an optional local LLM."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { file = "LICENSE" }
-authors = [{ name = "macos-llm-file-cleanup" }]
+authors = [{ name = "llm-file-rename-n-sort" }]
 dependencies = []
 
 [project.optional-dependencies]
@@ -20,4 +20,4 @@ dev = ["pytest>=7.0.0"]
 image = ["pillow>=10.0.0", "pillow-heif>=0.18.0"]
 
 [project.scripts]
-macos-llm-file-cleanup = "rename_n_sort.cli:main"
+llm-file-rename-n-sort = "rename_n_sort.cli:main"

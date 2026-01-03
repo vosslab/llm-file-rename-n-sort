@@ -12,7 +12,7 @@ import os
 
 # local repo modules
 from .config import AppConfig
-from .llm import DummyLLM, LocalLLM, sanitize_filename
+from .llm import BaseClassLLM, sanitize_filename
 from .plugins import FileMetadata, PluginRegistry, build_registry
 from .renamer import apply_move
 from .scanner import iter_files
@@ -53,6 +53,64 @@ class Organizer:
 		if sys.stdout.isatty():
 			return f"\033[{code}m{text}\033[0m"
 		return text
+
+	#============================================
+	def _print_separator(self) -> None:
+		print("=" * 60, file=sys.stderr)
+
+	#============================================
+	def _display_path(self, path: Path) -> str:
+		for root in self.config.normalized_roots():
+			try:
+				return str(path.resolve().relative_to(root.resolve()))
+			except Exception:
+				continue
+		return path.name
+
+	#============================================
+	def _display_target(self, path: Path) -> str:
+		if self.config.target_root is not None:
+			try:
+				return str(path.resolve().relative_to(self.config.normalized_target_root()))
+			except Exception:
+				return path.name
+		for root in self.config.normalized_roots():
+			candidate = root / "Organized"
+			try:
+				return str(path.resolve().relative_to(candidate.resolve()))
+			except Exception:
+				continue
+		return path.name
+
+	#============================================
+	def _target_root_for_source(self, source: Path) -> Path:
+		if self.config.target_root is not None:
+			return self.config.normalized_target_root()
+		for root in self.config.normalized_roots():
+			try:
+				source.resolve().relative_to(root.resolve())
+				return root / "Organized"
+			except Exception:
+				continue
+		return source.parent / "Organized"
+
+	#============================================
+	def _print_pair(self, label: str, left: str, right: str, detail: str = "") -> None:
+		tag = f"[{label}]"
+		colored = self._color(tag, "36")
+		indent = " " * (len(tag) + 1)
+		print(f"{colored} {left}")
+		if detail:
+			print(f"{indent}-> {right} {detail}")
+		else:
+			print(f"{indent}-> {right}")
+
+	#============================================
+	def _print_why(self, label: str, value: str) -> None:
+		if not value:
+			return
+		tag = self._color("[WHY]", "35")
+		print(f"{tag} {label}: {self._shorten(value)}")
 
 	#============================================
 	def _shorten(self, text: str, limit: int = 160) -> str:
@@ -98,13 +156,12 @@ class Organizer:
 		return (plan, summary)
 
 	#============================================
-	def __init__(self, config: AppConfig, llm: LocalLLM | None = None) -> None:
+	def __init__(self, config: AppConfig, llm: BaseClassLLM | None = None) -> None:
 		self.config = config
 		self.registry: PluginRegistry = build_registry()
 		if not llm:
-			self.llm = DummyLLM(model="dummy")
-		else:
-			self.llm = llm
+			raise RuntimeError("Organizer requires a configured LLM backend.")
+		self.llm = llm
 
 	#============================================
 	def plan(self, files: list[Path] | None = None) -> list[PlannedChange]:
@@ -117,85 +174,93 @@ class Organizer:
 		plans: list[PlannedChange] = []
 		summaries: list[dict] = []
 		candidates = files if files is not None else iter_files(self.config)
+		first = True
 		for idx, path in enumerate(candidates):
-			print(f"{self._color('[INFO]', '34')} Processing {path}")
+			if not first:
+				self._print_separator()
+			first = False
+			print(f"{self._color('[FILE]', '34')} {self._display_path(path)}")
 			plan, summary = self._plan_one(path, idx)
-			if self.config.explain:
-				title = self._shorten(summary.get("description", "") or "")
-				if title:
-					print(f"{self._color('[INFO]', '34')} desc: {title}")
-				if plan.rename_reason:
-					print(f"{self._color('[INFO]', '34')} rename_reason: {self._shorten(plan.rename_reason)}")
-				print(
-					f"{self._color('[INFO]', '34')} keep_original: {str(plan.keep_original).lower()}"
-					+ (f" ({self._shorten(plan.keep_reason)})" if plan.keep_reason else "")
-				)
+			title = summary.get("description", "") or ""
+			self._print_why("desc", title)
+			self._print_why("rename_reason", plan.rename_reason)
+			keep_detail = str(plan.keep_original).lower()
+			if plan.keep_reason:
+				keep_detail = f"{keep_detail} ({plan.keep_reason})"
+			self._print_why("keep_original", keep_detail)
 			plans.append(plan)
-			print(
-				f"{self._color('[PLAN1]', '36')} {path} -> {plan.new_name} "
-				f"(plugin={plan.plugin})"
+			self._print_pair(
+				"RENAME",
+				self._display_path(plan.source),
+				plan.new_name,
+				f"(plugin={plan.plugin})",
 			)
 			summaries.append(summary)
 		self._assign_categories(plans, summaries)
 		for plan in plans:
-			print(
-				f"{self._color('[PLAN2]', '36')} {plan.source} -> {plan.target} "
-				f"(category={plan.category}, plugin={plan.plugin})"
+			self._print_pair(
+				"DEST",
+				self._display_path(plan.source),
+				self._display_target(plan.target),
+				f"(category={plan.category}, plugin={plan.plugin})",
 			)
-			if self.config.explain and plan.category_reason:
-				print(
-					f"{self._color('[INFO]', '34')} category_reason: {self._shorten(plan.category_reason)}"
-				)
+			self._print_why("category_reason", plan.category_reason)
 		return plans
 
 	#============================================
 	def process_one_by_one(self, files: list[Path] | None = None) -> list[PlannedChange]:
 		"""
-		Process files to completion one by one (PLAN1 -> PLAN2 -> DRY RUN/APPLY).
+		Process files to completion one by one (RENAME -> DEST -> DRY RUN/APPLY).
 		"""
 		plans: list[PlannedChange] = []
 		candidates = files if files is not None else iter_files(self.config)
+		first = True
 		for path in candidates:
-			print(f"{self._color('[INFO]', '34')} Processing {path}")
+			if not first:
+				self._print_separator()
+			first = False
+			print(f"{self._color('[FILE]', '34')} {self._display_path(path)}")
 			plan, summary = self._plan_one(path, index=0)
-			if self.config.explain:
-				desc = self._shorten(summary.get("description", "") or "")
-				if desc:
-					print(f"{self._color('[INFO]', '34')} desc: {desc}")
-				if plan.rename_reason:
-					print(f"{self._color('[INFO]', '34')} rename_reason: {self._shorten(plan.rename_reason)}")
-				print(
-					f"{self._color('[INFO]', '34')} keep_original: {str(plan.keep_original).lower()}"
-					+ (f" ({self._shorten(plan.keep_reason)})" if plan.keep_reason else "")
-				)
-			print(
-				f"{self._color('[PLAN1]', '36')} {plan.source} -> {plan.new_name} "
-				f"(plugin={plan.plugin})"
+			desc = summary.get("description", "") or ""
+			self._print_why("desc", desc)
+			self._print_why("rename_reason", plan.rename_reason)
+			keep_detail = str(plan.keep_original).lower()
+			if plan.keep_reason:
+				keep_detail = f"{keep_detail} ({plan.keep_reason})"
+			self._print_why("keep_original", keep_detail)
+			self._print_pair(
+				"RENAME",
+				self._display_path(plan.source),
+				plan.new_name,
+				f"(plugin={plan.plugin})",
 			)
 			cats, reasons = self.llm.assign_categories_explain([summary])
 			category = cats.get(0, "Other")
 			plan.category_reason = reasons.get(0, "")
 			plan.category = category
 			plan.target = self._target_path(plan.source, plan.new_name, category)
-			print(
-				f"{self._color('[PLAN2]', '36')} {plan.source} -> {plan.target} "
-				f"(category={plan.category}, plugin={plan.plugin})"
+			self._print_pair(
+				"DEST",
+				self._display_path(plan.source),
+				self._display_target(plan.target),
+				f"(category={plan.category}, plugin={plan.plugin})",
 			)
-			if self.config.explain and plan.category_reason:
-				print(
-					f"{self._color('[INFO]', '34')} category_reason: {self._shorten(plan.category_reason)}"
-				)
+			self._print_why("category_reason", plan.category_reason)
 			if self.config.dry_run:
-				print(
-					f"{self._color('[DRY RUN]', '33')} {plan.source} -> {plan.target} "
-					f"(category={plan.category}, plugin={plan.plugin})"
+				self._print_pair(
+					"DRY RUN",
+					self._display_path(plan.source),
+					self._display_target(plan.target),
+					f"(category={plan.category}, plugin={plan.plugin})",
 				)
 			else:
 				plan.target = apply_move(plan.source, plan.target, dry_run=False)
 				if plan.target.exists():
-					print(
-						f"{self._color('[APPLY]', '32')} {plan.source} -> {plan.target} "
-						f"(category={plan.category}, plugin={plan.plugin})"
+					self._print_pair(
+						"APPLY",
+						self._display_path(plan.source),
+						self._display_target(plan.target),
+						f"(category={plan.category}, plugin={plan.plugin})",
 					)
 			plans.append(plan)
 		return plans
@@ -210,11 +275,7 @@ class Organizer:
 		batch_size = 50
 		for start in range(0, len(summaries), batch_size):
 			batch = summaries[start : start + batch_size]
-			if self.config.explain:
-				cats, reasons = self.llm.assign_categories_explain(batch)
-			else:
-				cats = self.llm.assign_categories(batch)
-				reasons = {}
+			cats, reasons = self.llm.assign_categories_explain(batch)
 			for item in batch:
 				idx = item["index"]
 				category = cats.get(idx, "Other")
@@ -315,7 +376,7 @@ class Organizer:
 			new_filename = clean_name
 		else:
 			new_filename = f"{clean_name}{ext}"
-		target_root = self.config.normalized_target_root()
+		target_root = self._target_root_for_source(path)
 		if category:
 			target_root = target_root / "cleaned" / sanitize_filename(category)
 		target_path = target_root / new_filename

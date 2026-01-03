@@ -3,6 +3,18 @@
 ## 2026-01-03
 - Update module references to `rename_n_sort` across code, tests, CLI entrypoint, and docs.
 - Add pytest `conftest.py` to ensure local package imports resolve without installation.
+- Make Apple Foundation Models the primary macOS backend with Ollama fallback; remove DummyLLM fallback behavior.
+- Process files one-by-one by default and simplify CLI flags accordingly.
+- Rename console prefixes to `[SCAN]`, `[FILE]`, `[WHY]`, `[RENAME]`, and `[DEST]`, plus add per-file separators and shorter path display.
+- Require Moondream2 captioning and OCR (pytesseract) for image metadata; include OCR text in summaries.
+- Add `Brewfile`, clean and sort `pip_requirements.txt`, and add sample file generator + dependency availability tests.
+- Remove `source_me_for_testing.sh`.
+- Rename the distribution/CLI entrypoint to `llm-file-rename-n-sort`.
+- Bundle Moondream2 captioning helpers directly in the repo to remove `OTHER_REPOS` dependencies.
+- Rename `MacOSLocalLLM` to `AppleLLM`, rename the base class to `BaseClassLLM`, and add `--max-depth` (default 1).
+- Add mutually-exclusive `--apply` and `--dry-run` flags (dry-run default) for safer CLI behavior.
+- Default target root now uses `<search_root>/Organized` to keep files on the same drive unless `--target` is set.
+- Clarify `--context` to indicate it is injected into LLM prompts with examples.
 
 ## 2026-01-02
 - Bump version to `26.01` and add root `VERSION` file synced with `pyproject.toml`.

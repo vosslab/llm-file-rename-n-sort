@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 # Standard Library
-import importlib
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
@@ -10,11 +9,11 @@ import xml.etree.ElementTree as ET
 from .base import FileMetadata, FileMetadataPlugin
 from .mdls_utils import mdls_field
 
-try:
-	import pillow_heif
-	pillow_heif.register_heif_opener()
-except Exception:
-	pillow_heif = None
+import pillow_heif
+from PIL import Image
+import pytesseract
+
+pillow_heif.register_heif_opener()
 
 #============================================
 
@@ -49,54 +48,59 @@ class ImagePlugin(FileMetadataPlugin):
 		title = mdls_field(path, "kMDItemTitle")
 		if title:
 			meta.title = title
+		ocr_text = self._extract_ocr_text(path)
+		if ocr_text:
+			meta.extra["ocr_text"] = ocr_text
 		caption = self._try_caption(path)
-		if caption:
-			meta.summary = caption
-		else:
-			meta.summary = f"Image file {path.suffix.lower().lstrip('.')}"
+		meta.summary = self._combine_summary(caption, ocr_text, path)
 		if caption:
 			print(f"\033[35m[CAPTION]\033[0m {path.name}: {caption}")
 		return meta
 
 	#============================================
+	def _combine_summary(self, caption: str | None, ocr_text: str | None, path: Path) -> str:
+		parts: list[str] = []
+		if caption:
+			parts.append(caption)
+		if ocr_text:
+			parts.append(f"OCR: {ocr_text}")
+		if parts:
+			joined = " | ".join(parts)
+			return joined[:800]
+		return f"Image file {path.suffix.lower().lstrip('.')}"
+
+	#============================================
+	def _extract_ocr_text(self, path: Path) -> str | None:
+		"""
+		Extract OCR text for bitmap images using Tesseract.
+		"""
+		with Image.open(path) as image:
+			text = pytesseract.image_to_string(image)
+		text = " ".join(text.split())
+		return text or None
+
+	#============================================
 	def _try_caption(self, path: Path) -> str | None:
 		"""
-		Attempt to caption using moondream2 if available.
+		Caption using Moondream2 (required).
 		"""
 		ext = path.suffix.lower().lstrip(".")
 		if ext in {"svg", "svgz"}:
 			return None
-		moondream2 = getattr(self, "_moondream2_module", None)
-		if moondream2 is None and not getattr(self, "_moondream2_import_attempted", False):
-			try:
-				moondream2 = importlib.import_module("ai_image_caption.moondream2")
-			except Exception:
-				moondream2 = None
-			self._moondream2_module = moondream2
-			self._moondream2_import_attempted = True
-		if not moondream2:
-			if not hasattr(self, "_caption_status_printed"):
-				print("\033[35m[CAPTION]\033[0m Moondream2 not available; install its dependencies to enable image captions.")
-				self._caption_status_printed = True
-			return None
+		if not hasattr(self, "_moondream2_module"):
+			from rename_n_sort import moondream2_caption
+			self._moondream2_module = moondream2_caption
+		moondream2 = self._moondream2_module
 		if not hasattr(self, "_ai_components"):
 			try:
 				self._ai_components = moondream2.setup_ai_components()
 				print("\033[35m[CAPTION]\033[0m Moondream2 initialized; captions enabled.")
 			except Exception as exc:
-				if not hasattr(self, "_caption_status_printed"):
-					print(f"\033[35m[CAPTION]\033[0m Failed to initialize Moondream2 ({exc}); skipping captions.")
-					self._caption_status_printed = True
-				self._ai_components = None
-		if not getattr(self, "_ai_components", None):
-			return None
+				raise RuntimeError(f"Failed to initialize Moondream2: {exc}") from exc
 		try:
 			return moondream2.generate_caption(str(path), self._ai_components)
 		except Exception as exc:
-			if not hasattr(self, "_caption_status_printed"):
-				print(f"\033[35m[CAPTION]\033[0m Captioning failed for {path.name} ({exc}); skipping.")
-				self._caption_status_printed = True
-			return None
+			raise RuntimeError(f"Moondream2 captioning failed for {path.name}: {exc}") from exc
 
 	#============================================
 	def _read_svg_text(self, path: Path) -> str | None:

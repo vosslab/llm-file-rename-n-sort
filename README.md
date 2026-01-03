@@ -1,11 +1,11 @@
-# macos-llm-file-cleanup
+# llm-file-rename-n-sort
 
-Local-first macOS tool that scans Downloads, Desktop, and Documents, extracts metadata with pluggable extractors, and uses a local Ollama LLM (with deterministic fallback) to rename and optionally sort files into category folders. Designed for Apple Silicon with no cloud calls.
+Local-first macOS tool that scans Downloads, Desktop, and Documents, extracts metadata with pluggable extractors, and uses Apple Foundation Models (with Ollama fallback) to rename and optionally sort files into category folders. Designed for Apple Silicon with no cloud calls.
 
 ## Capabilities
 - Recursively scan messy folders with extension filters and file limits.
 - Extract metadata via dedicated plugins per file type; fall back to a generic mdls/stat reader.
-- Ask a chat-based Ollama model (persistent history) for a new file name and category, or use a deterministic Dummy heuristic when Ollama is unavailable.
+- Ask Apple Foundation Models (local) for a new file name and category, with Ollama as a backup.
 - Apply safe renames/moves with collision avoidance; dry run by default.
 
 ## Supported file types (v1)
@@ -13,7 +13,7 @@ Local-first macOS tool that scans Downloads, Desktop, and Documents, extracts me
 - Presentations: ppt, pptx, odp
 - Spreadsheets/data: xls, xlsx, ods, csv, tsv (csv/tsv handled by a dedicated plugin)
 - Images: jpg, jpeg, png, gif, heic, tif, tiff, bmp (bitmap) and svg/svgz (vector via dedicated plugin)
-- Images can optionally use Moondream2 (if `ai_image_caption/moondream2.py` deps are installed) to auto-caption; install Pillow + pillow-heif (see `image` extra) for HEIC support.
+- Images use Moondream2 + OCR for captions (requires Moondream2 dependencies and Tesseract); install Pillow + pillow-heif (see `image` extra) for HEIC support.
 - Audio: mp3, wav, flac, aiff, ogg
 - Video: mp4, mov, mkv, webm, avi
 - Code/scripts (as text): py, m, cpp, js, sh, pl, rb, php
@@ -31,16 +31,16 @@ Local-first macOS tool that scans Downloads, Desktop, and Documents, extracts me
 	- Code/scripts: `code_plugin.py`
 	- Text: `text.py`
 	- Fallback: `generic.py`
-- `llm.py`: LocalLLM interface, `OllamaChatLLM` (chat history, /api/chat), `DummyLLM`, filename/category helpers, VRAM/RAM-based model chooser.
+- `llm.py`: BaseClassLLM interface, `AppleLLM` (Apple Foundation Models), `OllamaChatLLM` (chat history, /api/chat), filename/category helpers, VRAM/RAM-based model chooser.
 - `organizer.py`: orchestrates metadata -> LLM suggestion -> target path -> apply (with collision handling).
 - `renamer.py`: safe move/rename with deduping.
 - `tests/`: pytest coverage for heuristics, plugin selection, model selection, and collision handling.
 
 ## LLM integration
 - Interface: `suggest_name_and_category(metadata: dict, current_name: str) -> tuple[str, str]`
+- Apple Foundation Models: `AppleLLM` uses the local Apple Intelligence backend.
 - Ollama: `OllamaChatLLM` keeps in-memory chat messages and posts to `http://localhost:11434/api/chat` with `stream: false`.
-- Dummy fallback: deterministic naming from title/keywords/summary and extension-based categories.
-- Availability check: if Ollama is unreachable at startup, the tool logs a warning and uses DummyLLM.
+- Availability check: if Apple Foundation Models are unavailable, the tool logs a warning and falls back to Ollama.
 - Prompt format expects lines:
 	- `new_name: <file name without path>`
 	- `category: <short category or empty>`
@@ -57,7 +57,7 @@ python -m venv .venv
 source .venv/bin/activate
 pip install -e .
 # install all dependencies (LLM, captions, docs, etc.)
-pip install -r requirements.txt
+pip install -r pip_requirements.txt
 ```
 
 ## Quick start
@@ -69,18 +69,16 @@ python -m rename_n_sort --paths /path/to/folder --apply --model "llama3.2:3b-ins
 
 ## CLI reference
 - `-p/--paths PATH [PATH ...]` required scan roots
-- `-d/--dry-run` dry run
 - `-a/--apply` perform renames and moves
+- `-d/--dry-run` dry run (default)
 - `-m/--max-files N` limit processed files
+- `--max-depth N` maximum directory depth to scan (default 1)
 - `-c/--config FILE` optional JSON or YAML overrides
 - `-e/--ext EXT` repeatable extension filter
-- `-g/--category CAT` limit to a category (docs, data, images, audio, video, code)
-- `-t/--target PATH` target root (default `~/Organized`)
-- `-r/--recursive` enable recursion; `-s/--stop-recursive` disable recursion
+- `-t/--target PATH` target root (default `<search_path>/Organized`)
 - `-o/--model MODEL` override Ollama model
 - `-v/--verbose` verbose logging
-- `-x/--context "text"` optional user/folder context to keep naming on-theme
-- `-z/--randomize` shuffle processing order (useful for testing)
+- `-x/--context "text"` optional context string added to LLM prompts (example: `"Biology class"` or `"Client ACME"`)
 
 ## Configuration file (JSON/YAML)
 Supported keys:

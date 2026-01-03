@@ -26,9 +26,15 @@ def iter_files(config: AppConfig) -> list[Path]:
 	for root in config.normalized_roots():
 		if not root.exists():
 			continue
-		candidates = root.rglob("*") if config.recursive else root.iterdir()
-		for path in candidates:
+		for path in root.rglob("*"):
 			if path.is_dir():
+				continue
+			try:
+				rel = path.relative_to(root)
+			except Exception:
+				rel = path
+			depth = max(len(rel.parts) - 1, 0)
+			if depth > config.max_depth:
 				continue
 			if config.exclude_hidden and path.name.startswith("."):
 				continue

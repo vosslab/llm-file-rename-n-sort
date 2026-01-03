@@ -29,32 +29,28 @@ class AppConfig:
 
 	Attributes:
 		roots: Paths to scan.
-		target_root: Folder where cleaned files are stored.
+		target_root: Folder where cleaned files are stored (default: <search_root>/Organized).
 		dry_run: Only print planned work.
 		max_files: Optional limit.
-		recursive: Traverse subdirectories.
+		max_depth: Maximum directory depth to scan.
 		include_extensions: Optional filter set.
 		exclude_hidden: Skip dotfiles when True.
 		llm_backend: LLM backend selector ("macos" or "ollama").
-		explain: Print LLM decisions and reasoning.
 		model_override: Optional Ollama model name.
 		config_path: Optional user config path.
 	"""
 	roots: list[Path] = field(default_factory=_default_roots)
-	target_root: Path = field(default_factory=lambda: Path.home() / "Organized")
+	target_root: Path | None = None
 	dry_run: bool = True
 	max_files: int | None = 150
-	recursive: bool = True
+	max_depth: int = 1
 	include_extensions: set[str] | None = None
 	exclude_hidden: bool = True
 	llm_backend: str = "macos"
-	explain: bool = True
 	model_override: str | None = None
 	config_path: Path | None = None
 	verbose: bool = False
 	context: str | None = None
-	randomize: bool = False
-	one_by_one: bool = False
 
 	#============================================
 	def normalized_roots(self) -> list[Path]:
@@ -75,6 +71,8 @@ class AppConfig:
 		Returns:
 			Normalized Path.
 		"""
+		if self.target_root is None:
+			raise RuntimeError("target_root is not set.")
 		target: Path = self.target_root.expanduser().resolve()
 		return target
 

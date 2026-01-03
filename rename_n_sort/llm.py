@@ -11,10 +11,15 @@ import re
 import subprocess
 import time
 import urllib.request
+import platform
 from dataclasses import dataclass
-from pathlib import Path
 
 #============================================
+
+
+MAX_FILENAME_CHARS = 100
+PROMPT_FILENAME_CHARS = 80
+MIN_MACOS_MAJOR = 26
 
 
 def sanitize_filename(name: str) -> str:
@@ -25,7 +30,7 @@ def sanitize_filename(name: str) -> str:
 		name: Proposed filename without extension.
 
 	Returns:
-		Sanitized name under 80 characters.
+		Sanitized name under MAX_FILENAME_CHARS characters.
 	"""
 	allowed = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.-_"
 	result_chars: list[str] = []
@@ -42,8 +47,8 @@ def sanitize_filename(name: str) -> str:
 	while "__" in cleaned:
 		cleaned = cleaned.replace("__", "_")
 	cleaned = cleaned.strip("-_.")
-	if len(cleaned) > 256:
-		cleaned = cleaned[:256]
+	if len(cleaned) > MAX_FILENAME_CHARS:
+		cleaned = cleaned[:MAX_FILENAME_CHARS]
 	return cleaned or "file"
 
 
@@ -75,20 +80,78 @@ def pick_category(extension: str) -> str:
 	"""
 	ext = extension.lower()
 	if ext in {"pdf", "doc", "docx", "odt", "rtf", "pages", "txt", "md"}:
-		return "docs"
+		return "Document"
 	if ext in {"ppt", "pptx", "odp"}:
-		return "docs"
+		return "Presentation"
 	if ext in {"xls", "xlsx", "ods", "csv", "tsv"}:
-		return "data"
+		return "Data"
 	if ext in {"png", "jpg", "jpeg", "heic", "gif", "tif", "tiff", "bmp", "svg", "svgz"}:
-		return "images"
+		return "Image"
 	if ext in {"mp3", "wav", "flac", "aiff", "ogg"}:
-		return "audio"
+		return "Audio"
 	if ext in {"mp4", "mov", "mkv", "webm", "avi"}:
-		return "video"
+		return "Video"
 	if ext in {"py", "m", "cpp", "js", "sh", "pl", "rb", "php"}:
-		return "code"
-	return "other"
+		return "Code"
+	return "Other"
+
+
+#============================================
+
+
+def _extract_response_block(response_text: str) -> str | None:
+	match = re.search(
+		r"<response\b[^>]*>.*?</response>",
+		response_text,
+		flags=re.IGNORECASE | re.DOTALL,
+	)
+	if not match:
+		return None
+	return match.group(0)
+
+
+def _tag_text(xml_block: str, tag: str) -> str:
+	match = re.search(
+		rf"<{tag}\b[^>]*>(.*?)</{tag}>",
+		xml_block,
+		flags=re.IGNORECASE | re.DOTALL,
+	)
+	if not match:
+		return ""
+	text = match.group(1).strip()
+	if text.startswith("<![CDATA[") and text.endswith("]]>"):
+		text = text[len("<![CDATA[") : -len("]]>")].strip()
+	return text.strip()
+
+
+def _parse_macos_version() -> tuple[int, int, int]:
+	version_str = platform.mac_ver()[0]
+	parts = [int(p) for p in version_str.split(".") if p.isdigit()]
+	while len(parts) < 3:
+		parts.append(0)
+	if len(parts) >= 3:
+		return parts[0], parts[1], parts[2]
+	return 0, 0, 0
+
+
+def apple_models_available() -> bool:
+	try:
+		from applefoundationmodels import Session, apple_intelligence_available
+	except Exception:
+		return False
+	arch = platform.machine().lower()
+	if arch != "arm64":
+		return False
+	major, _minor, _patch = _parse_macos_version()
+	if major < MIN_MACOS_MAJOR:
+		return False
+	try:
+		if not apple_intelligence_available():
+			return False
+	except Exception:
+		return False
+	_ = Session
+	return True
 
 
 #============================================
@@ -182,7 +245,7 @@ def choose_model(model_override: str | None) -> str:
 
 
 @dataclass(slots=True)
-class LocalLLM:
+class BaseClassLLM:
 	"""
 	Base local LLM interface.
 	"""
@@ -203,31 +266,28 @@ class LocalLLM:
 		Returns:
 			Tuple of (name, category).
 		"""
-		suggestion: tuple[str, str] = (current_name, "other")
-		return suggestion
+		raise NotImplementedError
 
 	#============================================
 	def rename_file(self, metadata: dict, current_name: str) -> str:
 		"""
 		Suggest a descriptive filename (no path).
 		"""
-		name, _cat = self.suggest_name_and_category(metadata, current_name)
-		return name
+		raise NotImplementedError
 
 	#============================================
 	def rename_file_explain(self, metadata: dict, current_name: str) -> tuple[str, str]:
 		"""
 		Suggest a descriptive filename plus a short reason.
 		"""
-		return (self.rename_file(metadata, current_name), "")
+		raise NotImplementedError
 
 	#============================================
 	def rename_with_keep(self, metadata: dict, current_name: str) -> tuple[str, bool]:
 		"""
 		Return (new_name, keep_original) from rename mode.
 		"""
-		new_name = self.rename_file(metadata, current_name)
-		return (new_name, True)
+		raise NotImplementedError
 
 	#============================================
 	def should_keep_original_explain(
@@ -236,14 +296,14 @@ class LocalLLM:
 		"""
 		Decide whether original filename stem is worth keeping, plus a short reason.
 		"""
-		return (True, "")
+		raise NotImplementedError
 
 	#============================================
 	def assign_categories(self, summaries: list[dict]) -> dict[int, str]:
 		"""
 		Assign categories for a batch of file summaries.
 		"""
-		return {}
+		raise NotImplementedError
 
 	#============================================
 	def assign_categories_explain(
@@ -252,213 +312,279 @@ class LocalLLM:
 		"""
 		Assign categories plus a per-file reason.
 		"""
-		return (self.assign_categories(summaries), {})
+		raise NotImplementedError
 
 
 #============================================
 
 
-class DummyLLM(LocalLLM):
+class AppleLLM(BaseClassLLM):
 	"""
-	Simple fallback LLM without heuristics.
+	Apple Foundation Models backend for local macOS LLM usage.
 	"""
+
+	#============================================
+	def __init__(self, model: str, system_message: str = "") -> None:
+		self.model = model
+		self.system_message = system_message.strip()
+
+	#============================================
+	def _require_apple_intelligence(self) -> None:
+		try:
+			from applefoundationmodels import Session, apple_intelligence_available
+		except Exception as exc:
+			raise RuntimeError("apple-foundation-models is required for the Apple backend.") from exc
+		arch = platform.machine().lower()
+		if arch != "arm64":
+			raise RuntimeError("Apple Intelligence requires Apple Silicon (arm64).")
+		major, minor, patch = _parse_macos_version()
+		if major < MIN_MACOS_MAJOR:
+			raise RuntimeError(
+				f"macOS {MIN_MACOS_MAJOR}.0+ is required (detected {major}.{minor}.{patch})."
+			)
+		if not apple_intelligence_available():
+			try:
+				reason = Session.get_availability_reason()
+			except Exception:
+				reason = "Apple Intelligence not available or not enabled."
+			raise RuntimeError(str(reason))
+
+	#============================================
+	def _ask(self, prompt: str, max_tokens: int = 200) -> str:
+		self._require_apple_intelligence()
+		from applefoundationmodels import Session
+		with Session(
+			instructions=(
+				"You generate concise, structured answers for file renaming. "
+				"Return only the XML requested by the prompt."
+			)
+		) as session:
+			response = session.generate(prompt, max_tokens=max_tokens, temperature=0.2)
+		return response.text.strip()
 
 	#============================================
 	def suggest_name_and_category(
 		self, metadata: dict, current_name: str
 	) -> tuple[str, str]:
-		"""
-		Deterministic fallback suggestion.
-
-		Args:
-			metadata: Metadata dictionary.
-			current_name: Current filename.
-
-		Returns:
-			Name and category tuple.
-		"""
-		title = metadata.get("title", "")
-		keywords = metadata.get("keywords", [])
-		summary = metadata.get("summary", "")
-		extension = metadata.get("extension", "")
-		stem = Path(current_name).stem
-		parts: list[str] = []
-		if title:
-			parts.append(str(title))
-		if keywords:
-			parts.append("-".join(str(k) for k in keywords[:2]))
-		if summary:
-			first_words = " ".join(summary.split()[:12])
-			if first_words:
-				parts.append(first_words)
-		if not parts:
-			parts.append(stem)
-		name_core = "-".join(parts)
-		name_core = sanitize_filename(name_core)
-		category = pick_category(extension)
-		if extension and not name_core.lower().endswith(f".{extension.lower()}"):
-			new_name = f"{name_core}.{extension}"
-		else:
-			new_name = name_core
-		result: tuple[str, str] = (new_name, category)
-		return result
+		name = self.rename_file(metadata, current_name)
+		cats = self.assign_categories(
+			[
+				{
+					"index": 0,
+					"name": name,
+					"ext": metadata.get("extension", ""),
+					"description": metadata.get("summary") or metadata.get("description") or "",
+				}
+			]
+		)
+		return (name, cats.get(0, "Other"))
 
 	#============================================
 	def rename_file(self, metadata: dict, current_name: str) -> str:
-		name, _cat = self.suggest_name_and_category(metadata, current_name)
+		name, _reason = self.rename_file_explain(metadata, current_name)
 		return name
 
 	#============================================
 	def rename_file_explain(self, metadata: dict, current_name: str) -> tuple[str, str]:
-		name, _cat = self.suggest_name_and_category(metadata, current_name)
-		reason_parts: list[str] = []
-		if metadata.get("title"):
-			reason_parts.append("used title")
-		if metadata.get("keywords"):
-			reason_parts.append("used keywords")
-		if metadata.get("summary") or metadata.get("description"):
-			reason_parts.append("used summary")
-		if not reason_parts:
-			reason_parts.append("used original stem")
-		return (name, "; ".join(reason_parts))
+		prompt = self._build_rename_prompt(metadata, current_name)
+		response_text = self._ask(prompt, max_tokens=200)
+		return self._parse_rename_response_explain(response_text, current_name)
+
+	#============================================
+	def rename_with_keep(self, metadata: dict, current_name: str) -> tuple[str, bool]:
+		new_name = self.rename_file(metadata, current_name)
+		keep, _reason = self.should_keep_original_explain(metadata, current_name, new_name)
+		return (new_name, keep)
 
 	#============================================
 	def should_keep_original_explain(
 		self, metadata: dict, current_name: str, new_name: str
 	) -> tuple[bool, str]:
-		stem = Path(current_name).stem
-		lower = stem.lower()
-		if re.fullmatch(r"[0-9a-f]{16,}", lower):
-			return (False, "original looks like a hex hash")
-		if re.fullmatch(
-			r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", lower
-		):
-			return (False, "original looks like a UUID")
-		if len(stem) >= 40 and re.fullmatch(r"[A-Za-z0-9_-]+", stem):
-			return (False, "original is long and token-like")
-		return (True, "original may contain useful context")
+		prompt = self._build_keep_prompt(metadata, current_name, new_name)
+		response_text = self._ask(prompt, max_tokens=120)
+		return self._parse_keep_response_explain(response_text)
 
 	#============================================
 	def assign_categories(self, summaries: list[dict]) -> dict[int, str]:
-		mapping: dict[int, str] = {}
-		for item in summaries:
-			ext = item.get("ext", "").lower()
-			category = pick_category(ext)
-			if category == "docs":
-				category = "Document"
-			elif category == "data":
-				category = "Data"
-			elif category == "images":
-				category = "Image"
-			elif category == "audio":
-				category = "Audio"
-			elif category == "video":
-				category = "Video"
-			elif category == "code":
-				category = "Code"
-			else:
-				category = "Other"
-			mapping[item["index"]] = category
+		mapping, _reasons = self.assign_categories_explain(summaries)
 		return mapping
 
 	#============================================
 	def assign_categories_explain(
 		self, summaries: list[dict]
 	) -> tuple[dict[int, str], dict[int, str]]:
-		mapping = self.assign_categories(summaries)
-		reasons: dict[int, str] = {}
+		if not summaries:
+			return ({}, {})
+		prompt = self._build_sort_prompt(summaries)
+		response_text = self._ask(prompt, max_tokens=240)
+		expected = [int(item["index"]) for item in summaries]
+		return self._parse_sort_response_explain(response_text, expected)
+
+	#============================================
+	def _build_rename_prompt(self, metadata: dict, current_name: str) -> str:
+		lines: list[str] = []
+		if self.system_message:
+			lines.append(f"Context: {self.system_message}")
+		lines.append(
+			f"Rename mode: create a concise macOS-safe filename up to {PROMPT_FILENAME_CHARS} characters."
+		)
+		lines.append("Use 3-8 meaningful tokens (names, IDs, dates, set numbers).")
+		lines.append("Separate tokens with underscores or hyphens.")
+		lines.append("Summarize captions/descriptions into keywords; do NOT copy long sentences.")
+		lines.append("Avoid filler adjectives like vibrant/beautiful; avoid repeating the original hashy name.")
+		lines.append("Respond with a single XML block and nothing else:")
+		lines.append("<response>")
+		lines.append("  <new_name>NAME_WITH_EXTENSION</new_name>")
+		lines.append("  <reason>short justification</reason>")
+		lines.append("</response>")
+		lines.append(f"current_name: {current_name}")
+		lines.append(f"title: {metadata.get('title')}")
+		lines.append(f"keywords: {metadata.get('keywords')}")
+		lines.append(f"description: {metadata.get('summary') or metadata.get('description')}")
+		if metadata.get("ocr_text"):
+			lines.append(f"ocr_text: {metadata.get('ocr_text')}")
+		lines.append(f"extension: {metadata.get('extension')}")
+		return "\n".join(lines)
+
+	#============================================
+	def _build_keep_prompt(self, metadata: dict, current_name: str, new_name: str) -> str:
+		lines: list[str] = []
+		if self.system_message:
+			lines.append(f"Context: {self.system_message}")
+		lines.append("Decide if the original filename is meaningful and should be kept.")
+		lines.append("Respond with a single XML block and nothing else:")
+		lines.append("<response>")
+		lines.append("  <keep_original>true</keep_original>")
+		lines.append("  <reason>short justification</reason>")
+		lines.append("</response>")
+		lines.append(
+			"Keep if the original stem has a person name, username, project name, set number, or unique ID; "
+			"discard if random hash/uuid or generic camera name."
+		)
+		lines.append(f"current_name: {current_name}")
+		lines.append(f"suggested_name: {new_name}")
+		lines.append(f"title: {metadata.get('title')}")
+		lines.append(f"description: {metadata.get('summary') or metadata.get('description')}")
+		if metadata.get("ocr_text"):
+			lines.append(f"ocr_text: {metadata.get('ocr_text')}")
+		return "\n".join(lines)
+
+	#============================================
+	def _build_sort_prompt(self, summaries: list[dict]) -> str:
+		lines: list[str] = []
+		if self.system_message:
+			lines.append(f"Context: {self.system_message}")
+		lines.append("Sorting mode: assign an allowed category to each file index.")
+		lines.append("Allowed categories:")
+		for cat in ALLOWED_CATEGORIES:
+			lines.append(f"- {cat}")
+		lines.append("Files:")
 		for item in summaries:
-			idx = item["index"]
-			ext = item.get("ext", "")
-			reasons[idx] = f"extension .{ext} bucket"
+			lines.append(
+				f"file_{item['index']}: name={item['name']}, ext={item.get('ext')}, desc={item.get('description')}"
+			)
+		lines.append("Respond with a single XML block and nothing else:")
+		lines.append("<response>")
+		lines.append("  <file index=\"N\">")
+		lines.append("    <category>Document</category>")
+		lines.append("    <reason>optional</reason>")
+		lines.append("  </file>")
+		lines.append("</response>")
+		return "\n".join(lines)
+
+	#============================================
+	def _parse_rename_response_explain(
+		self, response_text: str, current_name: str
+	) -> tuple[str, str]:
+		xml_block = _extract_response_block(response_text)
+		if xml_block:
+			new_name = _tag_text(xml_block, "new_name") or current_name
+			reason = _tag_text(xml_block, "reason")
+			return (sanitize_filename(new_name), reason)
+		return (sanitize_filename(current_name), "")
+
+	#============================================
+	def _parse_keep_response_explain(self, response_text: str) -> tuple[bool, str]:
+		xml_block = _extract_response_block(response_text)
+		if xml_block:
+			keep_text = _tag_text(xml_block, "keep_original").strip().lower()
+			keep = keep_text.startswith("t") or keep_text == "1" or keep_text == "yes"
+			reason = _tag_text(xml_block, "reason")
+			return (keep, reason)
+		return (True, "")
+
+	#============================================
+	def _parse_sort_response_explain(
+		self, response_text: str, expected_indices: list[int]
+	) -> tuple[dict[int, str], dict[int, str]]:
+		xml_block = _extract_response_block(response_text)
+		if xml_block:
+			mapping: dict[int, str] = {}
+			reasons: dict[int, str] = {}
+			for match in re.finditer(
+				r"<file\b[^>]*\bindex\s*=\s*[\"'](\d+)[\"'][^>]*>(.*?)</file>",
+				xml_block,
+				flags=re.IGNORECASE | re.DOTALL,
+			):
+				try:
+					idx = int(match.group(1))
+				except ValueError:
+					continue
+				body = match.group(2)
+				category_text = _tag_text(body, "category")
+				reason_text = _tag_text(body, "reason")
+				mapping[idx] = self._normalize_category(category_text)
+				if reason_text:
+					reasons[idx] = reason_text
+			for idx in expected_indices:
+				if idx not in mapping:
+					mapping[idx] = "Other"
+			return (mapping, reasons)
+		mapping: dict[int, str] = {}
+		reasons: dict[int, str] = {}
+		for idx in expected_indices:
+			mapping[idx] = "Other"
 		return (mapping, reasons)
 
-#============================================
-
-
-class MacOSLocalLLM(LocalLLM):
-	"""
-	macOS-local backend (default).
-
-	This is a placeholder backend that currently uses DummyLLM heuristics. It
-	exists so the CLI can choose between "macos" and "ollama" backends.
-	"""
-
 	#============================================
-	def __init__(self, model: str) -> None:
-		self.model = model
-		self._fallback = DummyLLM(model=model)
-
-	#============================================
-	def suggest_name_and_category(
-		self, metadata: dict, current_name: str
-	) -> tuple[str, str]:
-		return self._fallback.suggest_name_and_category(metadata, current_name)
-
-	#============================================
-	def rename_file(self, metadata: dict, current_name: str) -> str:
-		return self._fallback.rename_file(metadata, current_name)
-
-	#============================================
-	def rename_with_keep(self, metadata: dict, current_name: str) -> tuple[str, bool]:
-		return self._fallback.rename_with_keep(metadata, current_name)
-
-	#============================================
-	def assign_categories(self, summaries: list[dict]) -> dict[int, str]:
-		return self._fallback.assign_categories(summaries)
-
-	#============================================
-	def rename_file_explain(self, metadata: dict, current_name: str) -> tuple[str, str]:
-		return self._fallback.rename_file_explain(metadata, current_name)
-
-	#============================================
-	def should_keep_original_explain(
-		self, metadata: dict, current_name: str, new_name: str
-	) -> tuple[bool, str]:
-		return self._fallback.should_keep_original_explain(metadata, current_name, new_name)
-
-	#============================================
-	def assign_categories_explain(
-		self, summaries: list[dict]
-	) -> tuple[dict[int, str], dict[int, str]]:
-		return self._fallback.assign_categories_explain(summaries)
+	def _normalize_category(self, value: str) -> str:
+		if not value:
+			return "Other"
+		val = value.strip().lower()
+		for cat in ALLOWED_CATEGORIES:
+			if val == cat.lower():
+				return cat
+			if val.startswith(cat.lower() + " "):
+				return cat
+			if val.startswith(cat.lower() + "("):
+				return cat
+			if val.startswith(cat.lower() + "-"):
+				return cat
+		aliases = {
+			"doc": "Document",
+			"docs": "Document",
+			"spreadsheet": "Spreadsheet",
+			"sheet": "Spreadsheet",
+			"image": "Image",
+			"img": "Image",
+			"audio": "Audio",
+			"video": "Video",
+			"code": "Code",
+			"data": "Data",
+			"project": "Project",
+		}
+		if val in aliases:
+			return aliases[val]
+		return "Other"
 
 
 #============================================
 
 
-class OllamaChatLLM(LocalLLM):
+class OllamaChatLLM(BaseClassLLM):
 	"""
 	Ollama-backed chat client that keeps a local message history.
 	"""
-
-	#============================================
-	def _extract_response_block(self, response_text: str) -> str | None:
-		"""
-		Extract a single <response>...</response> block from a chatty model output.
-		"""
-		match = re.search(
-			r"<response\b[^>]*>.*?</response>",
-			response_text,
-			flags=re.IGNORECASE | re.DOTALL,
-		)
-		if not match:
-			return None
-		return match.group(0)
-
-	#============================================
-	def _tag_text(self, xml_block: str, tag: str) -> str:
-		match = re.search(
-			rf"<{tag}\b[^>]*>(.*?)</{tag}>",
-			xml_block,
-			flags=re.IGNORECASE | re.DOTALL,
-		)
-		if not match:
-			return ""
-		text = match.group(1).strip()
-		if text.startswith("<![CDATA[") and text.endswith("]]>"):
-			text = text[len("<![CDATA[") : -len("]]>")].strip()
-		return text.strip()
 
 	#============================================
 	def __init__(
@@ -527,11 +653,7 @@ class OllamaChatLLM(LocalLLM):
 			Name and category tuple.
 		"""
 		prompt = self._build_prompt(metadata, current_name)
-		try:
-			response_text = self.ask(prompt)
-		except Exception:
-			fallback = DummyLLM(model=self.model)
-			return fallback.suggest_name_and_category(metadata, current_name)
+		response_text = self.ask(prompt)
 		name, category = self._parse_response_text(
 			response_text, metadata, current_name
 		)
@@ -553,22 +675,16 @@ class OllamaChatLLM(LocalLLM):
 		LLM decision on whether original filename is meaningful.
 		"""
 		prompt = self._build_keep_prompt(metadata, current_name, new_name)
-		try:
-			response_text = self.ask(prompt)
-			return self._parse_keep_response(response_text)
-		except Exception:
-			return True
+		response_text = self.ask(prompt)
+		return self._parse_keep_response(response_text)
 
 	#============================================
 	def should_keep_original_explain(
 		self, metadata: dict, current_name: str, new_name: str
 	) -> tuple[bool, str]:
 		prompt = self._build_keep_prompt(metadata, current_name, new_name)
-		try:
-			response_text = self.ask(prompt)
-			return self._parse_keep_response_explain(response_text)
-		except Exception:
-			return (True, "fallback default: keep original")
+		response_text = self.ask(prompt)
+		return self._parse_keep_response_explain(response_text)
 
 	#============================================
 	def rename_file(self, metadata: dict, current_name: str) -> str:
@@ -576,21 +692,13 @@ class OllamaChatLLM(LocalLLM):
 		Rename mode: descriptive filename only.
 		"""
 		prompt = self._build_rename_prompt(metadata, current_name)
-		try:
-			response_text = self.ask(prompt)
-		except Exception:
-			fallback = DummyLLM(model=self.model)
-			return fallback.rename_file(metadata, current_name)
+		response_text = self.ask(prompt)
 		return self._parse_rename_response(response_text, current_name)
 
 	#============================================
 	def rename_file_explain(self, metadata: dict, current_name: str) -> tuple[str, str]:
 		prompt = self._build_rename_prompt(metadata, current_name)
-		try:
-			response_text = self.ask(prompt)
-		except Exception:
-			fallback = DummyLLM(model=self.model)
-			return fallback.rename_file_explain(metadata, current_name)
+		response_text = self.ask(prompt)
 		return self._parse_rename_response_explain(response_text, current_name)
 
 	#============================================
@@ -601,11 +709,7 @@ class OllamaChatLLM(LocalLLM):
 		if not summaries:
 			return {}
 		prompt = self._build_sort_prompt(summaries)
-		try:
-			response_text = self.ask(prompt)
-		except Exception:
-			fallback = DummyLLM(model=self.model)
-			return fallback.assign_categories(summaries)
+		response_text = self.ask(prompt)
 		expected = [int(item["index"]) for item in summaries]
 		return self._parse_sort_response(response_text, expected)
 
@@ -616,11 +720,7 @@ class OllamaChatLLM(LocalLLM):
 		if not summaries:
 			return ({}, {})
 		prompt = self._build_sort_prompt(summaries)
-		try:
-			response_text = self.ask(prompt)
-		except Exception:
-			fallback = DummyLLM(model=self.model)
-			return fallback.assign_categories_explain(summaries)
+		response_text = self.ask(prompt)
 		expected = [int(item["index"]) for item in summaries]
 		return self._parse_sort_response_explain(response_text, expected)
 
@@ -650,7 +750,9 @@ class OllamaChatLLM(LocalLLM):
 	#============================================
 	def _build_rename_prompt(self, metadata: dict, current_name: str) -> str:
 		lines: list[str] = []
-		lines.append("Rename mode: create a concise macOS-safe filename up to 256 characters.")
+		lines.append(
+			f"Rename mode: create a concise macOS-safe filename up to {PROMPT_FILENAME_CHARS} characters."
+		)
 		lines.append("Use 3-8 meaningful tokens (names, IDs, dates, set numbers).")
 		lines.append("Separate tokens with underscores or hyphens (e.g., Group_Of_8_Promo_Boxes).")
 		lines.append("Summarize captions/descriptions into keywords; do NOT copy long sentences.")
@@ -664,6 +766,8 @@ class OllamaChatLLM(LocalLLM):
 		lines.append(f"title: {metadata.get('title')}")
 		lines.append(f"keywords: {metadata.get('keywords')}")
 		lines.append(f"description: {metadata.get('summary') or metadata.get('description')}")
+		if metadata.get("ocr_text"):
+			lines.append(f"ocr_text: {metadata.get('ocr_text')}")
 		lines.append(f"extension: {metadata.get('extension')}")
 		return "\n".join(lines)
 
@@ -716,10 +820,10 @@ class OllamaChatLLM(LocalLLM):
 	def _parse_rename_response_explain(
 		self, response_text: str, current_name: str
 	) -> tuple[str, str]:
-		xml_block = self._extract_response_block(response_text)
+		xml_block = _extract_response_block(response_text)
 		if xml_block:
-			new_name = self._tag_text(xml_block, "new_name") or current_name
-			reason = self._tag_text(xml_block, "reason")
+			new_name = _tag_text(xml_block, "new_name") or current_name
+			reason = _tag_text(xml_block, "reason")
 			return (sanitize_filename(new_name), reason)
 		new_name = self._parse_rename_response(response_text, current_name)
 		reason = ""
@@ -760,11 +864,11 @@ class OllamaChatLLM(LocalLLM):
 
 	#============================================
 	def _parse_keep_response_explain(self, response_text: str) -> tuple[bool, str]:
-		xml_block = self._extract_response_block(response_text)
+		xml_block = _extract_response_block(response_text)
 		if xml_block:
-			keep_text = self._tag_text(xml_block, "keep_original").strip().lower()
+			keep_text = _tag_text(xml_block, "keep_original").strip().lower()
 			keep = keep_text.startswith("t") or keep_text == "1" or keep_text == "yes"
-			reason = self._tag_text(xml_block, "reason")
+			reason = _tag_text(xml_block, "reason")
 			return (keep, reason)
 		keep = self._parse_keep_response(response_text)
 		reason = ""
@@ -807,7 +911,7 @@ class OllamaChatLLM(LocalLLM):
 	def _parse_sort_response_explain(
 		self, response_text: str, expected_indices: list[int]
 	) -> tuple[dict[int, str], dict[int, str]]:
-		xml_block = self._extract_response_block(response_text)
+		xml_block = _extract_response_block(response_text)
 		if xml_block:
 			mapping: dict[int, str] = {}
 			reasons: dict[int, str] = {}
@@ -821,8 +925,8 @@ class OllamaChatLLM(LocalLLM):
 				except ValueError:
 					continue
 				body = match.group(2)
-				category_text = self._tag_text(body, "category")
-				reason_text = self._tag_text(body, "reason")
+				category_text = _tag_text(body, "category")
+				reason_text = _tag_text(body, "reason")
 				mapping[idx] = self._normalize_category(category_text)
 				if reason_text:
 					reasons[idx] = reason_text
