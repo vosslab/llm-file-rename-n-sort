@@ -16,6 +16,7 @@ class CodePlugin(FileMetadataPlugin):
 	"""
 
 	name = "code"
+	filetype_hint = "Source code"
 	supported_suffixes: set[str] = {
 		"py",
 		"m",

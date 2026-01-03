@@ -18,6 +18,7 @@ class GenericPlugin(FileMetadataPlugin):
 	"""
 
 	name = "generic"
+	filetype_hint = "File"
 	supported_suffixes: set[str] = set()
 
 	#============================================

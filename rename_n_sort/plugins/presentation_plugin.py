@@ -35,6 +35,7 @@ class PresentationPlugin(FileMetadataPlugin):
 	"""
 
 	name = "presentation"
+	filetype_hint = "Presentation"
 	supported_suffixes: set[str] = {"ppt", "pptx", "odp"}
 
 	#============================================

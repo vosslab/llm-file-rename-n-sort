@@ -17,6 +17,7 @@ class CSVPlugin(FileMetadataPlugin):
 	"""
 
 	name = "csv"
+	filetype_hint = "Delimited data table"
 	supported_suffixes: set[str] = {"csv", "tsv"}
 
 	#============================================

@@ -37,6 +37,7 @@ class SpreadsheetPlugin(FileMetadataPlugin):
 	"""
 
 	name = "spreadsheet"
+	filetype_hint = "Spreadsheet"
 	supported_suffixes: set[str] = {"xls", "xlsx", "ods", "csv", "tsv"}
 
 	#============================================

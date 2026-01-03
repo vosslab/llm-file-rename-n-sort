@@ -17,6 +17,7 @@ class TextDocumentPlugin(FileMetadataPlugin):
 	"""
 
 	name = "text"
+	filetype_hint = "Plain-text Document"
 	supported_suffixes: set[str] = {"txt", "md", "rtf"}
 
 	#============================================

@@ -17,6 +17,7 @@ class VideoPlugin(FileMetadataPlugin):
 	"""
 
 	name = "video"
+	filetype_hint = "Video file"
 	supported_suffixes: set[str] = {"mp4", "mov", "mkv", "webm", "avi"}
 
 	#============================================

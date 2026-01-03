@@ -63,6 +63,11 @@ Notes
 - mp4, mov, mkv, webm, avi
   - Title/metadata via mdls only.
 
+## Archives (metadata-only)
+- zip
+  - Reads the central directory only (no extraction).
+  - Captures top-level entries (depth 1) for summary context.
+
 ## Code / scripts (content-aware)
 - py, m, cpp, js, sh, pl, rb, php
   - Reads first ~10 lines of code.

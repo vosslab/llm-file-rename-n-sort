@@ -6,6 +6,7 @@ Shared LLM helpers (backend-agnostic).
 from __future__ import annotations
 
 # Standard Library
+from datetime import datetime
 import os
 import platform
 import re
@@ -33,6 +34,7 @@ ALLOWED_CATEGORIES = [
 _PLACEHOLDER_REASONS = {
 	"short justification",
 	"short reason",
+	"one sentence. refer to one feature flag.",
 	"optional",
 	"n/a",
 	"na",
@@ -65,6 +67,43 @@ def _print_llm(label: str) -> None:
 		print(f"\033[36m[LLM]\033[0m {label}")
 	else:
 		print(f"[LLM] {label}")
+
+
+def log_parse_failure(
+	*,
+	purpose: str,
+	error: Exception,
+	raw_text: str,
+	prompt: str | None = None,
+	stage: str | None = None,
+	log_path: str = "XML_PARSE_FAILURES.log",
+	max_chars: int = 8000,
+) -> None:
+	"""
+	Append parse failures to a log file for later review.
+	"""
+	try:
+		timestamp = datetime.utcnow().isoformat(timespec="seconds") + "Z"
+		parts = ["=" * 80, f"timestamp: {timestamp}", f"purpose: {purpose}"]
+		if stage:
+			parts.append(f"stage: {stage}")
+		parts.append(f"error: {error.__class__.__name__}: {error}")
+		if prompt is not None:
+			prompt_text = prompt.strip()
+			if len(prompt_text) > max_chars:
+				prompt_text = prompt_text[:max_chars].rstrip() + "\n...[truncated]..."
+			parts.append("prompt:")
+			parts.append(prompt_text)
+		raw = (raw_text or "").strip()
+		if len(raw) > max_chars:
+			raw = raw[:max_chars].rstrip() + "\n...[truncated]..."
+		parts.append("raw_response:")
+		parts.append(raw)
+		parts.append("")
+		with open(log_path, "a", encoding="utf-8", errors="replace") as handle:
+			handle.write("\n".join(parts))
+	except Exception:
+		return
 
 
 #============================================
@@ -112,7 +151,11 @@ def normalize_reason(reason: str | None) -> str:
 	return cleaned
 
 
-def _sanitize_prompt_text(value: object, max_token_len: int = _PROMPT_MAX_TOKEN_LEN) -> str:
+def _sanitize_prompt_text(
+	value: object,
+	max_token_len: int = _PROMPT_MAX_TOKEN_LEN,
+	max_chars: int | None = None,
+) -> str:
 	if value is None:
 		return ""
 	text = str(value)
@@ -136,7 +179,10 @@ def _sanitize_prompt_text(value: object, max_token_len: int = _PROMPT_MAX_TOKEN_
 			continue
 		seen.add(key)
 		lines.append(line)
-	return "\n".join(lines)
+	result = "\n".join(lines)
+	if max_chars and len(result) > max_chars:
+		return result[:max_chars].rstrip()
+	return result
 
 
 def _sanitize_prompt_list(value: object) -> list[str]:
@@ -202,9 +248,6 @@ def compute_stem_features(original_stem: str, suggested_name: str) -> dict[str, 
 	}
 
 
-#============================================
-
-
 def extract_xml_tag_content(raw_text: str, tag: str) -> str:
 	"""
 	Extract the last occurrence of a given XML-like tag.
@@ -256,6 +299,18 @@ def apple_models_available() -> bool:
 		return False
 	_ = Session
 	return True
+
+
+def _is_context_window_error(exc: Exception) -> bool:
+	name = exc.__class__.__name__.lower()
+	message = str(exc).lower()
+	if "contextwindow" in name or "contextwindow" in message:
+		return True
+	if "context window" in message or "context length" in message:
+		return True
+	if "context window size" in message or "context length exceeded" in message:
+		return True
+	return False
 
 
 def total_ram_bytes() -> int:

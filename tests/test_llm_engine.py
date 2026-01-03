@@ -10,6 +10,10 @@ class GuardrailViolationError(Exception):
 	pass
 
 
+class ContextWindowExceededError(Exception):
+	pass
+
+
 class DummyTransport:
 	name = "Dummy"
 
@@ -100,3 +104,39 @@ def test_guardrail_then_format_fix_falls_back_to_second_transport():
 	assert len(guardrail.calls) == 3
 	assert len(second.calls) == 2
 	assert "format fix" in second.calls[1][0].lower()
+
+
+def test_context_window_retry_minimal_prompt_on_first_transport():
+	class FlakyContext(DummyTransport):
+		def __init__(self):
+			super().__init__(
+				responses=[
+					"<response><new_name>Ok.pdf</new_name><reason>title</reason></response>"
+				]
+			)
+			self.first = True
+
+		def generate(self, prompt: str, *, purpose: str, max_tokens: int) -> str:
+			self.calls.append((purpose, prompt))
+			if self.first:
+				self.first = False
+				raise ContextWindowExceededError("Context window size exceeded")
+			return super().generate(prompt, purpose=purpose, max_tokens=max_tokens)
+
+	engine = LLMEngine(transports=[FlakyContext()])
+	result = engine.rename("old.pdf", {"extension": "pdf", "summary": "text"})
+	assert result.new_name == "Ok.pdf"
+	assert engine.transports[0].calls[0][1] != engine.transports[0].calls[1][1]
+
+
+def test_keep_original_allows_missing_stem_reason():
+	bad = DummyTransport(
+		responses=[
+			"<response><keep_original>true</keep_original>"
+			"<reason>One sentence. Refer to one feature flag.</reason></response>"
+		]
+	)
+	engine = LLMEngine(transports=[bad])
+	result = engine.keep_original("Budget-Report-2024", "Annual_Report_2024")
+	assert result.keep_original is True
+	assert result.reason == ""

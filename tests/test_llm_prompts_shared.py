@@ -28,3 +28,12 @@ def test_rename_prompt_uses_sanitized_description():
 	prompt = build_rename_prompt(req)
 	assert "Line1" in prompt
 	assert ("y" * 90) not in prompt
+
+
+def test_rename_prompt_includes_filetype_hint():
+	req = RenameRequest(
+		metadata={"filetype_hint": "ZIP archive", "summary": "Archive from vendor"},
+		current_name="bundle.zip",
+	)
+	prompt = build_rename_prompt(req)
+	assert "filetype: ZIP archive" in prompt

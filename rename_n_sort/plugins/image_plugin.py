@@ -26,6 +26,7 @@ class ImagePlugin(FileMetadataPlugin):
 	"""
 
 	name = "image"
+	filetype_hint = "Bitmap image"
 	supported_suffixes: set[str] = {
 		"jpg",
 		"jpeg",

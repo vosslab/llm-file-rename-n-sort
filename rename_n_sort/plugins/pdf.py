@@ -22,6 +22,7 @@ class PDFPlugin(FileMetadataPlugin):
 	"""
 
 	name = "pdf"
+	filetype_hint = "PDF document"
 	supported_suffixes: set[str] = {"pdf"}
 
 	#============================================

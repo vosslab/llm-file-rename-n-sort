@@ -43,6 +43,11 @@ class DocumentPlugin(FileMetadataPlugin):
 		meta = FileMetadata(path=path, plugin_name=self.name)
 		meta.extra["size_bytes"] = path.stat().st_size
 		meta.extra["extension"] = path.suffix.lstrip(".")
+		ext = path.suffix.lower().lstrip(".")
+		if ext in {"txt", "md", "rtf"}:
+			meta.extra["filetype_hint"] = "Plain-text Document"
+		elif ext in {"doc", "pages"}:
+			meta.extra["filetype_hint"] = "Word Processing Document"
 		title = mdls_field(path, "kMDItemTitle")
 		if title:
 			meta.title = title

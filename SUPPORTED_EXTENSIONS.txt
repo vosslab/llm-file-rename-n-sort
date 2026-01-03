@@ -38,6 +38,7 @@ tiff
 tsv
 txt
 wav
+zip
 webm
 xls
 xlsx

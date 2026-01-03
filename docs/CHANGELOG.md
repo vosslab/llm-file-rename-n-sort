@@ -44,6 +44,17 @@
 - Add clearer LibreOffice conversion diagnostics for DOC/PPT preview extraction.
 - Add a sample OCR image and a basic OCR test for it.
 - Update the test image generator to include a 128x32 SAMPLE OCR fixture.
+- Add ZIP archive support with top-level entry summaries and a ZIP metadata test.
+- Add per-plugin filetype hints to rename prompts and new filename normalization tests.
+- Add context-window retry handling and relaxed keep-original parsing when the reason is malformed.
+- Add file-only scanning guardrails and refine document filetype hints for plain text vs word processing.
+- Add tests to ensure scanners and organizers skip directories and handle files only.
+- Improve XML parsing by stripping code fences and tolerating malformed keep-original reasons.
+- Log all XML parse failures to `XML_PARSE_FAILURES.log` for later review.
+- Add malformed XML parser tests for code fences, chatter, and unclosed tags.
+- Handle nested/escaped `<response>` blocks when Apple returns XML inside strings.
+- Update keep-original prompt schema to discourage template echoing and nested responses.
+- Rename Apple transport label to AppleLLM in LLM logging.
 - Sanitize rename prompt content to strip non-printables, long tokens, and repeated lines.
 - Retry Apple rename prompts with a minimal title+excerpt prompt on guardrail errors before falling back.
 - Add ODG (OpenDocument Drawing) support in the vector image plugin.

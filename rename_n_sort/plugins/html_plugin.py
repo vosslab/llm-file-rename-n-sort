@@ -22,6 +22,7 @@ class HtmlPlugin(FileMetadataPlugin):
 	"""
 
 	name = "html"
+	filetype_hint = "HTML page"
 	supported_suffixes: set[str] = {"html", "htm"}
 
 	#============================================

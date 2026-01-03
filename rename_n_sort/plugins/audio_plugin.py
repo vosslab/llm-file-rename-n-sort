@@ -17,6 +17,7 @@ class AudioPlugin(FileMetadataPlugin):
 	"""
 
 	name = "audio"
+	filetype_hint = "Audio file"
 	supported_suffixes: set[str] = {"mp3", "wav", "flac", "aiff", "ogg"}
 
 	#============================================

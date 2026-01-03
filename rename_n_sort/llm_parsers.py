@@ -7,6 +7,7 @@ from __future__ import annotations
 
 # Standard Library
 from dataclasses import dataclass
+import html
 import re
 
 # local repo modules
@@ -19,6 +20,10 @@ class ParseError(RuntimeError):
 	"""
 	Raised when a model response does not match required XML.
 	"""
+
+	def __init__(self, message: str, raw_text: str = "") -> None:
+		super().__init__(message)
+		self.raw_text = raw_text
 
 
 @dataclass(slots=True)
@@ -41,40 +46,71 @@ class SortResult:
 	raw_text: str
 
 
+_CODE_FENCE_RE = re.compile(r"```[a-zA-Z0-9_+-]*\n(.*?)```", re.DOTALL)
+
+
+def _strip_code_fences(text: str) -> str:
+	if not text:
+		return ""
+	cleaned = text.strip()
+	if "```" not in cleaned:
+		return cleaned
+	def _unwrap(match: re.Match) -> str:
+		return match.group(1)
+	cleaned = _CODE_FENCE_RE.sub(_unwrap, cleaned)
+	return cleaned.strip()
+
+
+def _coerce_response_body(text: str) -> str:
+	cleaned = _strip_code_fences(text).strip().strip('"').strip("'")
+	response_body = extract_xml_tag_content(cleaned, "response")
+	if not response_body and "&lt;response" in cleaned.lower():
+		unescaped = html.unescape(cleaned)
+		response_body = extract_xml_tag_content(unescaped, "response")
+	if response_body and "<response" in response_body.lower():
+		response_body = extract_xml_tag_content(response_body, "response")
+	return response_body
+
+
 def parse_rename_response(text: str) -> RenameResult:
-	response_body = extract_xml_tag_content(text, "response")
+	response_body = _coerce_response_body(text)
 	if not response_body:
-		raise ParseError("Missing <response> block in rename response.")
+		raise ParseError("Missing <response> block in rename response.", text)
 	new_name = extract_xml_tag_content(response_body, "new_name")
 	reason = extract_xml_tag_content(response_body, "reason")
 	if not new_name:
-		raise ParseError("Missing <new_name> in rename response.")
+		raise ParseError("Missing <new_name> in rename response.", text)
 	if not reason:
-		raise ParseError("Missing <reason> in rename response.")
+		raise ParseError("Missing <reason> in rename response.", text)
 	return RenameResult(new_name=new_name, reason=reason, raw_text=text)
 
-
-def parse_keep_response(text: str, original_stem: str) -> KeepResult:
-	response_body = extract_xml_tag_content(text, "response")
+def parse_keep_response(
+	text: str, original_stem: str, *, require_stem_reason: bool = False
+) -> KeepResult:
+	response_body = _coerce_response_body(text)
 	if not response_body:
-		raise ParseError("Missing <response> block in keep response.")
+		raise ParseError("Missing <response> block in keep response.", text)
 	keep_text = extract_xml_tag_content(response_body, "keep_original").strip().lower()
 	reason = extract_xml_tag_content(response_body, "reason")
 	if not keep_text:
-		raise ParseError("Missing <keep_original> in keep response.")
-	if not reason:
-		raise ParseError("Missing <reason> in keep response.")
+		raise ParseError("Missing <keep_original> in keep response.", text)
 	keep = keep_text.startswith("t") or keep_text == "1" or keep_text == "yes"
+	if not reason:
+		if require_stem_reason:
+			raise ParseError("Missing <reason> in keep response.", text)
+		reason = ""
 	expected = f'original_stem="{original_stem}"'
-	if reason.count(expected) != 1:
-		raise ParseError("Keep reason must include original_stem exactly once.")
+	if reason and reason.count(expected) != 1:
+		if require_stem_reason:
+			raise ParseError("Keep reason must include original_stem exactly once.", text)
+		reason = ""
 	return KeepResult(keep_original=keep, reason=reason, raw_text=text)
 
 
 def parse_sort_response(text: str, expected_paths: list[str]) -> SortResult:
-	response_body = extract_xml_tag_content(text, "response")
+	response_body = _coerce_response_body(text)
 	if not response_body:
-		raise ParseError("Missing <response> block in sort response.")
+		raise ParseError("Missing <response> block in sort response.", text)
 	mapping: dict[str, str] = {}
 	for match in re.finditer(
 		r"<file\b[^>]*\bpath\s*=\s*[\"']([^\"']+)[\"'][^>]*>(.*?)</file>",

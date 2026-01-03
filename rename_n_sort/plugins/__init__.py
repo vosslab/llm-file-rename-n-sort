@@ -17,6 +17,7 @@ from .spreadsheet_plugin import SpreadsheetPlugin
 from .text import TextDocumentPlugin
 from .video_plugin import VideoPlugin
 from .vector_image_plugin import VectorImagePlugin
+from .zip_plugin import ZipPlugin
 
 __all__ = [
 	"FileMetadata",
@@ -47,6 +48,7 @@ def build_registry() -> PluginRegistry:
 	registry.register(VideoPlugin())
 	registry.register(CSVPlugin())
 	registry.register(CodePlugin())
+	registry.register(ZipPlugin())
 	registry.register(TextDocumentPlugin())
 	registry.register(GenericPlugin())
 	return registry

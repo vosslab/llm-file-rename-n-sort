@@ -27,7 +27,9 @@ from .llm_prompts import (
 from .llm_utils import (
 	compute_stem_features,
 	_is_guardrail_error,
+	_is_context_window_error,
 	_print_llm,
+	log_parse_failure,
 	normalize_reason,
 	sanitize_filename,
 )
@@ -76,16 +78,24 @@ class LLMEngine:
 			max_tokens=120,
 			retry_prompt=None,
 		)
-		result = self._parse_with_retry(
-			lambda text: parse_keep_response(text, original_stem),
-			prompt,
-			KEEP_SCHEMA_XML,
-			raw,
-			purpose="if original filename should be kept",
-			max_tokens=120,
-		)
-		result.reason = normalize_reason(result.reason)
-		return result
+		try:
+			result = self._parse_with_retry(
+				lambda text: parse_keep_response(text, original_stem),
+				prompt,
+				KEEP_SCHEMA_XML,
+				raw,
+				purpose="if original filename should be kept",
+				max_tokens=120,
+			)
+			result.reason = normalize_reason(result.reason)
+			return result
+		except ParseError as exc:
+			relaxed_text = exc.raw_text or raw
+			result = parse_keep_response(
+				relaxed_text, original_stem, require_stem_reason=False
+			)
+			result.reason = normalize_reason(result.reason)
+			return result
 
 	#============================================
 	def sort(self, files: list[SortItem]) -> SortResult:
@@ -123,7 +133,7 @@ class LLMEngine:
 				return self._generate_on_transport(transport, prompt, purpose, max_tokens)
 			except Exception as exc:
 				last_exc = exc
-				if _is_guardrail_error(exc):
+				if _is_guardrail_error(exc) or _is_context_window_error(exc):
 					if retry_prompt and idx == 0:
 						try:
 							_print_llm(
@@ -134,7 +144,7 @@ class LLMEngine:
 							)
 						except Exception as retry_exc:
 							last_exc = retry_exc
-							if _is_guardrail_error(retry_exc):
+							if _is_guardrail_error(retry_exc) or _is_context_window_error(retry_exc):
 								continue
 							raise
 					continue
@@ -159,9 +169,17 @@ class LLMEngine:
 		except ParseError as exc:
 			excerpt = " ".join(raw_text.split())[:160]
 			print(f"[WHY] parse_error: {exc} (excerpt: {excerpt})")
+			log_parse_failure(
+				purpose=purpose,
+				error=exc,
+				raw_text=exc.raw_text or raw_text,
+				prompt=original_prompt,
+				stage="initial",
+			)
 			fix_prompt = build_format_fix_prompt(original_prompt, schema_xml)
 			last_parse: ParseError | None = None
 			last_transport: Exception | None = None
+			last_fixed: str | None = None
 			for transport in self.transports:
 				try:
 					_print_llm(f"asking {transport.name} for {purpose} (format fix)")
@@ -171,6 +189,7 @@ class LLMEngine:
 						f"{purpose} (format fix)",
 						max_tokens,
 					)
+					last_fixed = fixed
 				except Exception as transport_exc:
 					if _is_guardrail_error(transport_exc):
 						last_transport = transport_exc
@@ -181,9 +200,17 @@ class LLMEngine:
 					return parser(fixed)
 				except ParseError as parse_exc:
 					last_parse = parse_exc
+					log_parse_failure(
+						purpose=purpose,
+						error=parse_exc,
+						raw_text=parse_exc.raw_text or fixed,
+						prompt=fix_prompt,
+						stage=f"format fix ({transport.name})",
+					)
 					continue
 			if last_parse:
-				raise last_parse
+				text = last_fixed or raw_text
+				raise ParseError(str(last_parse), raw_text=text)
 			if last_transport:
 				raise last_transport
 			raise ParseError("Format-fix retry failed.")

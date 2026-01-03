@@ -27,7 +27,7 @@ def iter_files(config: AppConfig) -> list[Path]:
 		if not root.exists():
 			continue
 		for path in root.rglob("*"):
-			if path.is_dir():
+			if not path.is_file():
 				continue
 			try:
 				rel = path.relative_to(root)

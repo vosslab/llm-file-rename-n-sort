@@ -56,8 +56,8 @@ RENAME_SCHEMA_XML = (
 )
 KEEP_SCHEMA_XML = (
 	"<response>\n"
-	"  <keep_original>true</keep_original>\n"
-	"  <reason>One sentence. Refer to one feature flag.</reason>\n"
+	"  <keep_original>true|false</keep_original>\n"
+	"  <reason>original_stem=\"...\" feature_flag=... short reason</reason>\n"
 	"</response>"
 )
 SORT_SCHEMA_XML = (
@@ -86,15 +86,19 @@ def build_rename_prompt(req: RenameRequest) -> str:
 	lines.append("Avoid filler adjectives like vibrant/beautiful.")
 	lines.append("Return XML only. Do not include code fences.")
 	lines.append(RENAME_SCHEMA_XML)
-	title = _sanitize_prompt_text(req.metadata.get("title"))
+	title = _sanitize_prompt_text(req.metadata.get("title"), max_chars=200)
 	keywords = _sanitize_prompt_list(req.metadata.get("keywords"))
 	description = _sanitize_prompt_text(
-		req.metadata.get("summary") or req.metadata.get("description")
+		req.metadata.get("summary") or req.metadata.get("description"),
+		max_chars=1200,
 	)
-	caption = _sanitize_prompt_text(req.metadata.get("caption"))
-	ocr_text = _sanitize_prompt_text(req.metadata.get("ocr_text"))
+	caption = _sanitize_prompt_text(req.metadata.get("caption"), max_chars=800)
+	ocr_text = _sanitize_prompt_text(req.metadata.get("ocr_text"), max_chars=800)
 	caption_note = _sanitize_prompt_text(req.metadata.get("caption_note"))
+	filetype_hint = _sanitize_prompt_text(req.metadata.get("filetype_hint"))
 	lines.append(f"current_name: {req.current_name}")
+	if filetype_hint:
+		lines.append(f"filetype: {filetype_hint}")
 	if title:
 		lines.append(f"title: {title}")
 	if keywords:
@@ -125,9 +129,12 @@ def build_rename_prompt_minimal(req: RenameRequest) -> str:
 	lines.append("Include a date only if clearly present and important (format YYYYMMDD).")
 	lines.append("Return XML only. Do not include code fences.")
 	lines.append(RENAME_SCHEMA_XML)
-	title = _sanitize_prompt_text(req.metadata.get("title"))
+	title = _sanitize_prompt_text(req.metadata.get("title"), max_chars=200)
 	excerpt = _prompt_excerpt(req.metadata)
+	filetype_hint = _sanitize_prompt_text(req.metadata.get("filetype_hint"))
 	lines.append(f"current_name: {req.current_name}")
+	if filetype_hint:
+		lines.append(f"filetype: {filetype_hint}")
 	if title:
 		lines.append(f"title: {title}")
 	if excerpt:
@@ -157,6 +164,8 @@ def build_keep_prompt(req: KeepRequest) -> str:
 	lines.append(
 		f"Reason must include original_stem=\"{req.original_stem}\" exactly once."
 	)
+	lines.append("Do not repeat the schema text verbatim; populate real values.")
+	lines.append("Return a single <response> block only (no nesting).")
 	lines.append("Reason must not mention rules or instructions.")
 	lines.append("Return XML only. Do not include code fences.")
 	lines.append(KEEP_SCHEMA_XML)

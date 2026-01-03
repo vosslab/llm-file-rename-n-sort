@@ -20,7 +20,11 @@ def test_parse_rename_missing_name_raises():
 
 def test_parse_keep_missing_reason_raises():
 	with pytest.raises(ParseError):
-		parse_keep_response("<response><keep_original>true</keep_original></response>", "abc")
+		parse_keep_response(
+			"<response><keep_original>true</keep_original></response>",
+			"abc",
+			require_stem_reason=True,
+		)
 
 
 def test_parse_keep_requires_stem_once():
@@ -29,6 +33,7 @@ def test_parse_keep_requires_stem_once():
 			"<response><keep_original>true</keep_original>"
 			"<reason>original_stem=\"abc\" and original_stem=\"abc\"</reason></response>",
 			"abc",
+			require_stem_reason=True,
 		)
 
 
@@ -60,7 +65,14 @@ def test_parse_keep_requires_exact_stem_match():
 			"<response><keep_original>true</keep_original>"
 			"<reason>original_stem=\"Abc\"</reason></response>",
 			"abc",
+			require_stem_reason=True,
 		)
+
+
+def test_parse_keep_lenient_missing_reason():
+	result = parse_keep_response("<response><keep_original>true</keep_original></response>", "abc")
+	assert result.keep_original is True
+	assert result.reason == ""
 
 
 def test_parse_sort_duplicate_paths_raises():

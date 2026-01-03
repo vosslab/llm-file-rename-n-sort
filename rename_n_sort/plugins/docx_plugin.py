@@ -20,6 +20,7 @@ class DocxPlugin(FileMetadataPlugin):
 	"""
 
 	name = "docx"
+	filetype_hint = "Word Processing Document"
 	supported_suffixes: set[str] = {"docx"}
 
 	#============================================

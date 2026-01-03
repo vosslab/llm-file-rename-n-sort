@@ -25,6 +25,13 @@ def test_parse_rename_response():
 	assert "title" in result.reason.lower()
 
 
+def test_parse_rename_response_with_code_fence():
+	result = parse_rename_response(
+		"```xml\n<response><new_name>My_File.pdf</new_name><reason>title</reason></response>\n```"
+	)
+	assert result.new_name == "My_File.pdf"
+
+
 def test_parse_sort_response_expected_paths():
 	result = parse_sort_response(
 		"<response>"

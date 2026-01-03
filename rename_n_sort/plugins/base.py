@@ -47,6 +47,7 @@ class FileMetadataPlugin:
 
 	name: str = "base"
 	supported_suffixes: set[str] = set()
+	filetype_hint: str | None = None
 
 	#============================================
 	def supports(self, path: Path) -> bool:

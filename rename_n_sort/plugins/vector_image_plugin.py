@@ -27,6 +27,7 @@ class VectorImagePlugin(FileMetadataPlugin):
 	"""
 
 	name = "vector_image"
+	filetype_hint = "Vector image"
 	supported_suffixes: set[str] = {"svg", "svgz", "odg"}
 
 	#============================================

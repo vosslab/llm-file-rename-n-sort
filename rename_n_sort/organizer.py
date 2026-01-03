@@ -202,6 +202,10 @@ class Organizer:
 				self._print_separator()
 			first = False
 			print(f"{self._color('[FILE]', '34')} {self._display_path(path)}")
+			if not path.exists() or not path.is_file():
+				self._print_why("error", "Path is not a file")
+				self._print_why("action", "skipping path")
+				continue
 			if not self._is_supported_extension(path):
 				ext = path.suffix.lower().lstrip(".")
 				self._print_why("error", f"Unsupported extension: .{ext}")
@@ -249,6 +253,10 @@ class Organizer:
 				self._print_separator()
 			first = False
 			print(f"{self._color('[FILE]', '34')} {self._display_path(path)}")
+			if not path.exists() or not path.is_file():
+				self._print_why("error", "Path is not a file")
+				self._print_why("action", "skipping path")
+				continue
 			if not self._is_supported_extension(path):
 				ext = path.suffix.lower().lstrip(".")
 				self._print_why("error", f"Unsupported extension: .{ext}")
@@ -368,6 +376,8 @@ class Organizer:
 		meta = plugin.extract_metadata(path)
 		meta.plugin_name = plugin.name
 		meta.extra["extension"] = path.suffix.lstrip(".")
+		if "filetype_hint" not in meta.extra and getattr(plugin, "filetype_hint", None):
+			meta.extra["filetype_hint"] = plugin.filetype_hint
 		if "extension" not in meta.extra:
 			meta.extra["extension"] = path.suffix.lstrip(".")
 		meta.extra["keywords"] = meta.keywords

@@ -13,7 +13,7 @@ from ..llm_utils import MIN_MACOS_MAJOR, _parse_macos_version
 
 
 class AppleTransport:
-	name = "Apple"
+	name = "AppleLLM"
 
 	def __init__(self) -> None:
 		pass
