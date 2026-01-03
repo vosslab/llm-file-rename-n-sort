@@ -44,14 +44,14 @@ def test_keep_original_normalizes_placeholder_reason():
 	transport = DummyTransport(
 		responses=[
 			(
-				"<keep_original>true</keep_original>"
+				"<stem_action>keep</stem_action>"
 				"<reason>short justification</reason>"
 			)
 		]
 	)
 	engine = LLMEngine(transports=[transport])
-	result = engine.keep_original("Report", "NewReport")
-	assert result.keep_original is True
+	result = engine.stem_action("Report", "NewReport")
+	assert result.stem_action == "keep"
 	assert result.reason == ""
 
 

@@ -2,6 +2,10 @@
 
 ## 2026-01-03
 - Update module references to `rename_n_sort` across code, tests, CLI entrypoint, and docs.
+- Rename plugin test files to the `test_plugin_<type>.py` convention.
+- Split plugin coverage into individual `test_plugin_<type>.py` files for all plugins.
+- Expand document and spreadsheet plugin tests to cover multiple sample types.
+- Rename dependency check test to `test_all_required_deps.py` for earlier ordering.
 - Add pytest `conftest.py` to ensure local package imports resolve without installation.
 - Make Apple Foundation Models the primary macOS backend with Ollama fallback; remove DummyLLM fallback behavior.
 - Process files one-by-one by default and simplify CLI flags accordingly.
@@ -24,6 +28,10 @@
 - Simplify keep-original logging to store only parsed values plus raw response.
 - Shift LLM prompts to example-driven flat tags, drop original-stem echoes, and simplify sort output to a single <category> tag.
 - Update parsers to require unique tag names while ignoring extra chatter, and remove JSON fallbacks.
+- Remove prompt-echo rejection so parsers only fail on missing or duplicate required tags.
+- Replace keep_original with a 3-state stem_action (drop/normalize/keep) and allow legacy keep_original tags during transition.
+- Allow rename responses without <reason> while still requiring <new_name>.
+- Minimize LLM prompts to a single instruction plus context and an example output.
 - Refine rename/keep prompts to emphasize human-readable filenames and reduce noisy tokens.
 - For PDFs with two pages or fewer, render pages to images and use OCR+captioning instead of plain text extraction.
 - Replace PDF rasterization via pyvips/libvips with pdf2image/poppler for more stable OCR rendering.

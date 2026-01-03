@@ -20,8 +20,7 @@ def test_format_fix_prompt_includes_example():
 	original = "original prompt text"
 	example = "<new_name>X.pdf</new_name><reason>invoice</reason>"
 	prompt = build_format_fix_prompt(original, example)
-	assert "previous reply did not match" in prompt.lower()
-	assert "tags below" in prompt.lower()
+	assert "reply with tags only" in prompt.lower()
 	assert example in prompt
 
 
@@ -59,10 +58,11 @@ def test_prompts_avoid_response_and_short_reason():
 	assert "<response>" not in prompt
 	assert "short reason" not in prompt.lower()
 	keep_prompt = build_keep_prompt(
-		KeepRequest(original_stem="A1", suggested_name="Report", features={})
+		KeepRequest(original_stem="A1", suggested_name="Report", extension=None, features={})
 	)
 	assert "<response>" not in keep_prompt
 	assert "short reason" not in keep_prompt.lower()
+	assert "<stem_action>" in keep_prompt
 
 
 def test_sort_prompt_uses_category_only():

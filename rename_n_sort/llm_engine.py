@@ -66,36 +66,31 @@ class LLMEngine:
 		return result
 
 	#============================================
-	def keep_original(self, original_stem: str, suggested_name: str) -> KeepResult:
+	def stem_action(self, original_stem: str, suggested_name: str, extension: str | None = None) -> KeepResult:
 		features = compute_stem_features(original_stem, suggested_name)
 		req = KeepRequest(
-			original_stem=original_stem, suggested_name=suggested_name, features=features
+			original_stem=original_stem,
+			suggested_name=suggested_name,
+			extension=extension,
+			features=features,
 		)
 		prompt = build_keep_prompt(req)
 		raw = self._generate_with_fallback(
 			prompt,
-			purpose="if original filename should be kept",
+			purpose="how to handle the original filename stem",
 			max_tokens=120,
 			retry_prompt=None,
 		)
-		try:
-			result = self._parse_with_retry(
-				lambda text: parse_keep_response(text, original_stem),
-				prompt,
-				KEEP_EXAMPLE_OUTPUT,
-				raw,
-				purpose="if original filename should be kept",
-				max_tokens=120,
-			)
-			result.reason = normalize_reason(result.reason)
-			return result
-		except ParseError as exc:
-			relaxed_text = exc.raw_text or raw
-			result = parse_keep_response(
-				relaxed_text, original_stem, require_stem_reason=False
-			)
-			result.reason = normalize_reason(result.reason)
-			return result
+		result = self._parse_with_retry(
+			lambda text: parse_keep_response(text, original_stem),
+			prompt,
+			KEEP_EXAMPLE_OUTPUT,
+			raw,
+			purpose="how to handle the original filename stem",
+			max_tokens=120,
+		)
+		result.reason = normalize_reason(result.reason)
+		return result
 
 	#============================================
 	def sort(self, files: list[SortItem]) -> SortResult:

@@ -34,7 +34,7 @@ class RenameResult:
 
 @dataclass(slots=True)
 class KeepResult:
-	keep_original: bool
+	stem_action: str
 	reason: str
 	raw_text: str
 
@@ -77,22 +77,6 @@ def _find_tag_values(text: str, tag: str) -> list[str]:
 	return [match.strip() for match in pattern.findall(text)]
 
 
-_PROMPT_LEAK_PHRASES = (
-	"previous reply did not match",
-	"do not include",
-	"return only",
-	"schema",
-	"tags below",
-)
-
-
-def _contains_prompt_leak(text: str) -> bool:
-	if not text:
-		return False
-	lower = text.lower()
-	return any(phrase in lower for phrase in _PROMPT_LEAK_PHRASES)
-
-
 def parse_rename_response(text: str) -> RenameResult:
 	response_body = _coerce_response_body(text)
 	if not response_body:
@@ -103,39 +87,47 @@ def parse_rename_response(text: str) -> RenameResult:
 	if len(new_names) > 1:
 		raise ParseError("Duplicate <new_name> tags in rename response.", text)
 	reasons = _find_tag_values(response_body, "reason")
-	if not reasons:
-		raise ParseError("Missing <reason> in rename response.", text)
 	if len(reasons) > 1:
 		raise ParseError("Duplicate <reason> tags in rename response.", text)
 	new_name = new_names[0]
-	reason = reasons[0]
-	if _contains_prompt_leak(reason):
-		raise ParseError("Reason appears to echo prompt instructions.", text)
+	reason = reasons[0] if reasons else ""
 	return RenameResult(new_name=new_name, reason=reason, raw_text=text)
 
 def parse_keep_response(
-	text: str, original_stem: str, *, require_stem_reason: bool = False
+	text: str, original_stem: str
 ) -> KeepResult:
 	response_body = _coerce_response_body(text)
 	if not response_body:
 		raise ParseError("Missing required tags in keep response.", text)
-	keep_values = _find_tag_values(response_body, "keep_original")
-	if not keep_values:
-		raise ParseError("Missing <keep_original> in keep response.", text)
-	if len(keep_values) > 1:
-		raise ParseError("Duplicate <keep_original> tags in keep response.", text)
+	stem_actions = _find_tag_values(response_body, "stem_action")
+	if len(stem_actions) > 1:
+		raise ParseError("Duplicate <stem_action> tags in keep response.", text)
 	reason_values = _find_tag_values(response_body, "reason")
 	if not reason_values:
 		raise ParseError("Missing <reason> in keep response.", text)
 	if len(reason_values) > 1:
 		raise ParseError("Duplicate <reason> tags in keep response.", text)
-	keep_text = keep_values[0].strip().lower()
-	reason = reason_values[0]
-	keep = keep_text.startswith("t") or keep_text == "1" or keep_text == "yes"
+	reason = reason_values[0].strip()
+	if stem_actions:
+		stem_action = stem_actions[0].strip().lower()
+	else:
+		keep_values = _find_tag_values(response_body, "keep_original")
+		if not keep_values:
+			raise ParseError("Missing <stem_action> in keep response.", text)
+		if len(keep_values) > 1:
+			raise ParseError("Duplicate <keep_original> tags in keep response.", text)
+		keep_text = keep_values[0].strip().lower()
+		stem_action = (
+			"keep"
+			if (keep_text.startswith("t") or keep_text == "1" or keep_text == "yes")
+			else "drop"
+		)
 	reason = reason.replace('\\"', '"').replace("\\'", "'")
-	if reason and _contains_prompt_leak(reason):
-		raise ParseError("Reason appears to echo prompt instructions.", text)
-	return KeepResult(keep_original=keep, reason=reason, raw_text=text)
+	if stem_action not in {"drop", "keep", "normalize"}:
+		raise ParseError("Invalid <stem_action> value in keep response.", text)
+	if not reason:
+		raise ParseError("Missing <reason> in keep response.", text)
+	return KeepResult(stem_action=stem_action, reason=reason, raw_text=text)
 
 
 def parse_sort_response(text: str, expected_paths: list[str]) -> SortResult:

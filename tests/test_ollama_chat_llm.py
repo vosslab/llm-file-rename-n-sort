@@ -17,9 +17,10 @@ def test_keep_prompt_requires_stem_reason():
 	req = KeepRequest(
 		original_stem="ABC123",
 		suggested_name="NewName",
+		extension=None,
 		features={"has_letter": True},
 	)
 	prompt = build_keep_prompt(req)
-	assert "Reason must not mention rules" in prompt
-	assert "<keep_original>" in prompt
+	assert "Reason should mention what useful info is in the stem" in prompt
+	assert "<stem_action>" in prompt
 	assert "<reason>" in prompt

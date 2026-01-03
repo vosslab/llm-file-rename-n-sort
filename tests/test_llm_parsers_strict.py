@@ -21,7 +21,7 @@ def test_parse_rename_missing_name_raises():
 def test_parse_keep_missing_reason_raises():
 	with pytest.raises(ParseError):
 		parse_keep_response(
-			"<keep_original>true</keep_original>",
+			"<stem_action>keep</stem_action>",
 			"abc",
 		)
 
@@ -29,42 +29,41 @@ def test_parse_keep_missing_reason_raises():
 def test_parse_keep_duplicate_reason_raises():
 	with pytest.raises(ParseError):
 		parse_keep_response(
-			"<keep_original>true</keep_original>"
+			"<stem_action>keep</stem_action>"
 			"<reason>one</reason><reason>two</reason>",
 			"abc",
 		)
 
 
 @pytest.mark.parametrize(
-	"keep_value, expected",
-	[
-		("true", True),
-		("TRUE", True),
-		("1", True),
-		("yes", True),
-		("false", False),
-		("FALSE", False),
-		("0", False),
-		("no", False),
-	],
+	"action",
+	["keep", "drop", "normalize"],
 )
-def test_parse_keep_boolean_variants(keep_value, expected):
+def test_parse_keep_actions(action):
 	result = parse_keep_response(
-		f"<keep_original>{keep_value}</keep_original>"
-		"<reason>stem looks numeric</reason>",
+		f"<stem_action>{action}</stem_action>"
+		"<reason>ok</reason>",
 		"abc",
 	)
-	assert result.keep_original is expected
+	assert result.stem_action == action
 
 
-def test_parse_keep_duplicate_keep_original_raises():
+def test_parse_keep_duplicate_stem_action_raises():
 	with pytest.raises(ParseError):
 		parse_keep_response(
-			"<keep_original>true</keep_original>"
-			"<keep_original>false</keep_original>"
+			"<stem_action>keep</stem_action>"
+			"<stem_action>drop</stem_action>"
 			"<reason>two values</reason>",
 			"abc",
 		)
+
+
+def test_parse_keep_legacy_keep_original_maps_to_action():
+	result = parse_keep_response(
+		"<keep_original>true</keep_original><reason>legacy</reason>",
+		"abc",
+	)
+	assert result.stem_action == "keep"
 
 
 def test_parse_sort_duplicate_category_raises():

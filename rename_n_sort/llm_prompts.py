@@ -31,6 +31,7 @@ class RenameRequest:
 class KeepRequest:
 	original_stem: str
 	suggested_name: str
+	extension: str | None
 	features: dict[str, object]
 
 
@@ -53,8 +54,8 @@ RENAME_EXAMPLE_OUTPUT = (
 	"<reason>invoice with vendor and date</reason>"
 )
 KEEP_EXAMPLE_OUTPUT = (
-	"<keep_original>false</keep_original>\n"
-	"<reason>stem is numeric and generic</reason>"
+	"<stem_action>normalize</stem_action>\n"
+	"<reason>date and topic in stem are useful</reason>"
 )
 SORT_EXAMPLE_OUTPUT = "<category>Document</category>"
 
@@ -64,22 +65,8 @@ def build_rename_prompt(req: RenameRequest) -> str:
 	if req.context:
 		lines.append(f"Context: {req.context}")
 	lines.append(
-		f"Rename mode: create a concise, human-readable filename up to {PROMPT_FILENAME_CHARS} characters."
+		f"Rename this file concisely (max {PROMPT_FILENAME_CHARS} chars)."
 	)
-	lines.append("Goal: the filename should make immediate sense to a person skimming a folder.")
-	lines.append("Focus on purpose or type (form, invoice, receipt, contract, screenshot topic).")
-	lines.append("Summarize instead of listing every visible word.")
-	lines.append("Use 2-6 meaningful tokens; keep names short (1-2 names max).")
-	lines.append("Avoid phone numbers, emails, or long numeric strings.")
-	lines.append("Include a date only if clearly present and important (format YYYYMMDD).")
-	lines.append("Include an ID only if it is a short labeled identifier.")
-	lines.append("Avoid repeating tokens or echoing noisy original stems.")
-	lines.append("Separate tokens with underscores or hyphens.")
-	lines.append("Avoid filler adjectives like vibrant/beautiful.")
-	lines.append("Return only the tags shown below. Do not include code fences.")
-	lines.append("Do not wrap tags in any outer container.")
-	lines.append("Example output:")
-	lines.append(RENAME_EXAMPLE_OUTPUT)
 	title = _sanitize_prompt_text(req.metadata.get("title"), max_chars=200)
 	keywords = _sanitize_prompt_list(req.metadata.get("keywords"))
 	description = _sanitize_prompt_text(
@@ -106,6 +93,9 @@ def build_rename_prompt(req: RenameRequest) -> str:
 	if caption_note:
 		lines.append(f"caption_note: {caption_note}")
 	lines.append(f"extension: {req.metadata.get('extension')}")
+	lines.append("Return only the tags shown below.")
+	lines.append("Example output:")
+	lines.append(RENAME_EXAMPLE_OUTPUT)
 	return "\n".join(lines)
 
 
@@ -114,17 +104,8 @@ def build_rename_prompt_minimal(req: RenameRequest) -> str:
 	if req.context:
 		lines.append(f"Context: {req.context}")
 	lines.append(
-		f"Rename mode: create a concise, human-readable filename up to {PROMPT_FILENAME_CHARS} characters."
+		f"Rename this file concisely (max {PROMPT_FILENAME_CHARS} chars)."
 	)
-	lines.append("Goal: the filename should make immediate sense to a person skimming a folder.")
-	lines.append("Summarize instead of listing every visible word.")
-	lines.append("Use 2-6 meaningful tokens; keep names short (1-2 names max).")
-	lines.append("Avoid phone numbers, emails, or long numeric strings.")
-	lines.append("Include a date only if clearly present and important (format YYYYMMDD).")
-	lines.append("Return only the tags shown below. Do not include code fences.")
-	lines.append("Do not wrap tags in any outer container.")
-	lines.append("Example output:")
-	lines.append(RENAME_EXAMPLE_OUTPUT)
 	title = _sanitize_prompt_text(req.metadata.get("title"), max_chars=200)
 	excerpt = _prompt_excerpt(req.metadata)
 	filetype_hint = _sanitize_prompt_text(req.metadata.get("filetype_hint"))
@@ -136,37 +117,26 @@ def build_rename_prompt_minimal(req: RenameRequest) -> str:
 	if excerpt:
 		lines.append(f"excerpt: {excerpt}")
 	lines.append(f"extension: {req.metadata.get('extension')}")
+	lines.append("Return only the tags shown below.")
+	lines.append("Example output:")
+	lines.append(RENAME_EXAMPLE_OUTPUT)
 	return "\n".join(lines)
 
 
 def build_keep_prompt(req: KeepRequest) -> str:
 	lines: list[str] = []
-	lines.append("You are a strict classifier for whether to keep an original filename stem.")
-	lines.append("Use only original_stem and the computed feature flags below. Do not re-derive features.")
-	lines.append("Apply the rules in order and stop at the first match.")
-	lines.append("Rule 1: If is_numeric_only=true or original_stem is empty -> keep_original=false.")
-	lines.append("Rule 2: If generic_label=true and alpha_token_count <= 1 -> keep_original=false.")
-	lines.append("Rule 3: If alpha_token_count >= 2 and generic_label=false -> keep_original=true.")
-	lines.append(
-		"Rule 4: If uuid_like=true OR hex_blob=true OR long_digit_run=true -> keep_original=false."
-	)
-	lines.append(
-		"Rule 5: If digit_ratio > 0.6 AND alnum_length >= 10 -> keep_original=false."
-	)
-	lines.append(
-		"Rule 6: Otherwise keep_original=true if has_letter=true AND "
-		"(length <= 48 OR token_count <= 8) AND stem_in_suggested=false. Else false."
-	)
-	lines.append("Reason must not mention rules or instructions.")
-	lines.append("Return only the tags shown below. Do not include code fences.")
-	lines.append("Do not wrap tags in any outer container.")
-	lines.append("Example output:")
-	lines.append(KEEP_EXAMPLE_OUTPUT)
+	lines.append("Choose stem_action: drop | normalize | keep.")
+	lines.append("Reason should mention what useful info is in the stem.")
 	lines.append(f"original_stem: {req.original_stem}")
 	lines.append(f"suggested_name: {req.suggested_name}")
+	if req.extension:
+		lines.append(f"extension: {req.extension}")
 	lines.append("features:")
 	for key, value in req.features.items():
 		lines.append(f"- {key}: {value}")
+	lines.append("Return only the tags shown below.")
+	lines.append("Example output:")
+	lines.append(KEEP_EXAMPLE_OUTPUT)
 	return "\n".join(lines)
 
 
@@ -174,9 +144,7 @@ def build_sort_prompt(req: SortRequest) -> str:
 	lines: list[str] = []
 	if req.context:
 		lines.append(f"Context: {req.context}")
-	lines.append("Sorting mode: assign an allowed category to the file below.")
-	lines.append("Do not output JSON.")
-	lines.append("Do not use backticks or code blocks.")
+	lines.append("Assign one allowed category to the file below.")
 	lines.append("Allowed categories:")
 	for cat in ALLOWED_CATEGORIES:
 		lines.append(f"- {cat}")
@@ -185,9 +153,7 @@ def build_sort_prompt(req: SortRequest) -> str:
 	lines.append(
 		f"path={item.path} | name={item.name} | ext={item.ext} | desc={item.description}"
 	)
-	lines.append("If you cannot follow the format, output only the required tags, nothing else.")
-	lines.append("Return only the tags shown below. Do not include code fences.")
-	lines.append("Do not wrap tags in any outer container.")
+	lines.append("Return only the tags shown below.")
 	lines.append("Example output:")
 	lines.append(SORT_EXAMPLE_OUTPUT)
 	return "\n".join(lines)
@@ -195,11 +161,7 @@ def build_sort_prompt(req: SortRequest) -> str:
 
 def build_format_fix_prompt(original_prompt: str, example_output: str) -> str:
 	lines = [
-		"Your previous reply did not match the required tags.",
-		"Do not output JSON.",
-		"Do not use backticks or code blocks.",
-		"Output only the tags below with no extra text.",
+		"Reply with tags only.",
 		example_output,
-		"",
 	]
 	return "\n".join(lines)

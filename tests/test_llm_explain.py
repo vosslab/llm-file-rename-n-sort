@@ -9,11 +9,11 @@ from rename_n_sort.llm_utils import extract_xml_tag_content
 
 def test_parse_keep_response():
 	result = parse_keep_response(
-		"<keep_original>false</keep_original>"
+		"<stem_action>drop</stem_action>"
 		"<reason>too generic</reason>",
 		"abc123",
 	)
-	assert result.keep_original is False
+	assert result.stem_action == "drop"
 	assert "generic" in result.reason
 
 

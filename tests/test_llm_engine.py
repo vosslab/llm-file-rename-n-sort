@@ -133,12 +133,12 @@ def test_context_window_retry_minimal_prompt_on_first_transport():
 def test_keep_original_requires_reason():
 	transport = DummyTransport(
 		responses=[
-			"<keep_original>true</keep_original>",
-			"<keep_original>true</keep_original><reason>short stem is meaningful</reason>",
+			"<stem_action>keep</stem_action>",
+			"<stem_action>keep</stem_action><reason>short stem is meaningful</reason>",
 		]
 	)
 	engine = LLMEngine(transports=[transport])
-	result = engine.keep_original("Budget-Report-2024", "Annual_Report_2024")
-	assert result.keep_original is True
+	result = engine.stem_action("Budget-Report-2024", "Annual_Report_2024")
+	assert result.stem_action == "keep"
 	assert "meaningful" in result.reason
 	assert transport.calls[0][1] != transport.calls[1][1]

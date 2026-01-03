@@ -37,10 +37,10 @@ class PlannedChange:
 	plugin: str
 	dry_run: bool
 	new_name: str = ""
-	keep_original: bool = True
+	stem_action: str = "keep"
 	rename_reason: str = ""
-	keep_reason: str = ""
-	keep_raw: str = ""
+	stem_reason: str = ""
+	stem_raw: str = ""
 	category_reason: str = ""
 
 
@@ -157,7 +157,7 @@ class Organizer:
 		self,
 		path: Path,
 		raw_text: str,
-		keep_original: bool,
+		stem_action: str,
 		reason: str,
 	) -> None:
 		if raw_text is None:
@@ -166,7 +166,7 @@ class Organizer:
 			with open("KEEP_ORIGINAL.log", "a", encoding="utf-8") as handle:
 				handle.write("=" * 80 + "\n")
 				handle.write(f"FILE: {self._display_path(path)}\n")
-				handle.write(f"keep_original={str(keep_original).lower()}\n")
+				handle.write(f"stem_action={stem_action}\n")
 				handle.write(f"reason={reason}\n")
 				raw = raw_text.strip()
 				handle.write("raw_response=\n")
@@ -205,17 +205,27 @@ class Organizer:
 		rename_result = self.llm.rename(path.name, meta_payload)
 		new_name = self._normalize_new_name(path.name, rename_result.new_name)
 		rename_reason = rename_result.reason
-		keep_result = self.llm.keep_original(Path(path.name).stem, new_name)
-		keep_original = keep_result.keep_original
-		keep_reason = keep_result.reason
-		keep_raw = keep_result.raw_text
-		keep_reason = normalize_reason(keep_reason)
 		orig_stem = Path(path.name).stem
-		if keep_original:
+		keep_result = self.llm.stem_action(
+			orig_stem,
+			new_name,
+			extension=path.suffix.lstrip("."),
+		)
+		stem_action = keep_result.stem_action
+		stem_reason = keep_result.reason
+		stem_raw = keep_result.raw_text
+		stem_reason = normalize_reason(stem_reason)
+		if stem_action == "keep":
 			if orig_stem.lower() not in new_name.lower():
 				combined = f"{orig_stem}_{new_name}"
 				new_name = self._normalize_new_name(path.name, combined)
-				keep_reason = keep_reason or ""
+				stem_reason = stem_reason or ""
+		elif stem_action == "normalize":
+			normalized_stem = sanitize_filename(orig_stem)
+			if normalized_stem and normalized_stem.lower() not in new_name.lower():
+				combined = f"{normalized_stem}_{new_name}"
+				new_name = self._normalize_new_name(path.name, combined)
+				stem_reason = stem_reason or ""
 		plan = PlannedChange(
 			source=path,
 			target=path,
@@ -223,12 +233,12 @@ class Organizer:
 			plugin=metadata.plugin_name,
 			dry_run=self.config.dry_run,
 			new_name=new_name,
-			keep_original=keep_original,
+			stem_action=stem_action,
 			rename_reason=rename_reason,
-			keep_reason=keep_reason,
-			keep_raw=keep_raw,
+			stem_reason=stem_reason,
+			stem_raw=stem_raw,
 		)
-		self._log_keep_original_raw(path, keep_raw, keep_original, keep_reason)
+		self._log_keep_original_raw(path, stem_raw, stem_action, stem_reason)
 		sort_description = self._build_sort_description(meta_payload)
 		summary = SortItem(
 			path=str(path.resolve()),
@@ -288,12 +298,12 @@ class Organizer:
 			title = summary.description or ""
 			self._print_meta("text sample", title)
 			self._print_why("rename_reason", plan.rename_reason)
-			keep_detail = str(plan.keep_original).lower()
-			if plan.keep_reason:
-				keep_detail = f"{keep_detail} ({plan.keep_reason})"
-			elif plan.keep_original:
-				keep_detail = f"{keep_detail} (no justification provided)"
-			self._print_why("keep_original", keep_detail)
+			stem_detail = plan.stem_action
+			if plan.stem_reason:
+				stem_detail = f"{stem_detail} ({plan.stem_reason})"
+			elif plan.stem_action == "keep":
+				stem_detail = f"{stem_detail} (no justification provided)"
+			self._print_why("stem_action", stem_detail)
 			plans.append(plan)
 			self._print_pair(
 				"RENAME",
@@ -346,12 +356,12 @@ class Organizer:
 			desc = summary.description or ""
 			self._print_meta("text sample", desc)
 			self._print_why("rename_reason", plan.rename_reason)
-			keep_detail = str(plan.keep_original).lower()
-			if plan.keep_reason:
-				keep_detail = f"{keep_detail} ({plan.keep_reason})"
-			elif plan.keep_original:
-				keep_detail = f"{keep_detail} (no justification provided)"
-			self._print_why("keep_original", keep_detail)
+			stem_detail = plan.stem_action
+			if plan.stem_reason:
+				stem_detail = f"{stem_detail} ({plan.stem_reason})"
+			elif plan.stem_action == "keep":
+				stem_detail = f"{stem_detail} (no justification provided)"
+			self._print_why("stem_action", stem_detail)
 			self._print_pair(
 				"RENAME",
 				self._display_path(plan.source),

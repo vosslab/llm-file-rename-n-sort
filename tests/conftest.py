@@ -34,8 +34,10 @@ class StubLLM:
 	def rename(self, current_name: str, metadata: dict) -> RenameResult:
 		return RenameResult(new_name="stub_name", reason="stub reason", raw_text="")
 
-	def keep_original(self, original_stem: str, suggested_name: str) -> KeepResult:
-		return KeepResult(keep_original=False, reason="stub keep", raw_text="")
+	def stem_action(
+		self, original_stem: str, suggested_name: str, extension: str | None = None
+	) -> KeepResult:
+		return KeepResult(stem_action="drop", reason="stub keep", raw_text="")
 
 	def sort(self, files: list) -> SortResult:
 		assignments = {item.path: "Document" for item in files}
